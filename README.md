@@ -158,8 +158,7 @@ func main() {
 - Run the module
 
 ```shell
-go run <module_name>.go 
-# e.g. go run sample.go
+go run main.go 
 ```
 
 
