@@ -39,27 +39,27 @@ func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *ui
 	panic("implement me")
 }
 
-func (s Store) Set(k []byte, v []byte, ttl *uint64) error {
+func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s Store) Get(k []byte) ([]byte, error) {
+func (s *Store) Get(k []byte) ([]byte, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s Store) Delete(k []byte) error {
+func (s *Store) Delete(k []byte) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s Store) Clear() error {
+func (s *Store) Clear() error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s Store) Compact() error {
+func (s *Store) Compact() error {
 	//TODO implement me
 	panic("implement me")
 }

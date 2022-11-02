@@ -209,6 +209,10 @@ go test ./...
 go test -bench=. -run=^#
 ```
 
+## TODO
+
+- [ ] Do I need to consider closing the store (Store.Close()) since it has some background processes?
+
 ## Benchmarks
 
 TBD
