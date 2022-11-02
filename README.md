@@ -202,7 +202,7 @@ go mod tidy
 - Run the tests command
 
 ```shell
-go test ./...
+go test ./... -timeout 30s -race
 ```
 
 - Run benchmarks
