@@ -20,6 +20,9 @@
 # Go workspace file
 go.work
 
+# .idea
+.idea/
+
 # test dbs
 testdb/
 db/
