@@ -1,15 +1,5 @@
 package scdb
 
-// Storage is the public interface to be implemented for
-// an scdb store
-type Storage interface {
-	Set(k []byte, v []byte, ttl *uint64) error
-	Get(k []byte) ([]byte, error)
-	Delete(k []byte) error
-	Clear() error
-	Compact() error
-}
-
 type Store struct {
 }
 

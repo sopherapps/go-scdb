@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -94,8 +95,10 @@ func TestStore_Set(t *testing.T) {
 			store := createStore(t, dbPath, nil)
 			clearStore(t, store)
 			insertRecords(t, store, RECORDS, nil)
-			// the store at this point is garbage collected
 		}()
+
+		// the old store is expected to be garbage collected around here.
+		runtime.GC()
 
 		// Open another store
 		store := createStore(t, dbPath, nil)
@@ -126,8 +129,10 @@ func TestStore_Delete(t *testing.T) {
 
 			insertRecords(t, store, RECORDS, nil)
 			deleteRecords(t, store, keysToDelete)
-			// the store is expected to be garbage collected around here.
 		}()
+
+		// the old store is expected to be garbage collected around here.
+		runtime.GC()
 
 		// open another store
 		store := createStore(t, dbPath, nil)
@@ -160,8 +165,10 @@ func TestStore_Clear(t *testing.T) {
 			if err != nil {
 				t.Fatalf("error clearing store: %s", err)
 			}
-			// the store is expected to be garbage collected around here.
 		}()
+
+		// the old store is expected to be garbage collected around here.
+		runtime.GC()
 
 		// Create new store
 		store := createStore(t, dbPath, nil)
