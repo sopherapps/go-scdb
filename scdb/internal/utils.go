@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/sopherapps/go-scbd/scdb"
+	"os"
 )
 
 // Uint16ToByteArray converts a uint16 to a BigEndian byte array
@@ -107,4 +108,20 @@ func SafeSlice(data []byte, start uint64, end uint64, maxLength uint64) ([]byte,
 	}
 
 	return data[start:end], nil
+}
+
+// GenerateFileWithTestData creates a file at the given filePath if it does not exist
+// and adds the given data overwriting any pre-existing data
+func GenerateFileWithTestData(filePath string, data []byte) (*os.File, error) {
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = file.Write(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return file, nil
 }

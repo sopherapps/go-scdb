@@ -237,7 +237,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 		}
 
 		for _, record := range testData {
-			file, err := generateFileWithData(filePath, record.data)
+			file, err := internal.GenerateFileWithTestData(filePath, record.data)
 			if err != nil {
 				t.Fatalf("error generating file with data: %s", err)
 			}
@@ -315,7 +315,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 		}
 
 		for _, record := range testData {
-			file, err := generateFileWithData(filePath, record.data)
+			file, err := internal.GenerateFileWithTestData(filePath, record.data)
 			if err != nil {
 				t.Fatalf("error generating file with data: %s", err)
 			}
@@ -454,20 +454,4 @@ func generateHeader(maxKeys uint64, redundantBlocks uint16, blockSize uint32) *D
 		KeyValuesStartPoint: keyValuesStartPoint,
 		NetBlockSize:        netBlockSize,
 	}
-}
-
-// generateFileWithData creates a file at the given filePath if it does not exist
-// and adds the given data overwriting any pre-existing data
-func generateFileWithData(filePath string, data []byte) (*os.File, error) {
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = file.Write(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return file, nil
 }
