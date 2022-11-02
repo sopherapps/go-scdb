@@ -32,7 +32,8 @@ Of course to make it a little more appealing, it has some extra features like:
 
 ## Quick Start
 
-- Ensure you have golang +v1.18 installed. You can check the [official instructions](https://go.dev/doc/install) for how to do that.
+- Ensure you have golang +v1.18 installed. You can check the [official instructions](https://go.dev/doc/install) for how
+  to do that.
 
 - Initialize a new go modules project
 
@@ -161,7 +162,6 @@ func main() {
 go run main.go 
 ```
 
-
 ## Contributing
 
 Contributions are welcome. The docs have to maintained, the code has to be made cleaner, more idiomatic and faster,
@@ -169,7 +169,7 @@ and there might be need for someone else to take over this repo in case I move o
 
 Please look at the [CONTRIBUTIONS GUIDELINES](./docs/CONTRIBUTING.md)
 
-You can also look in the [./docs](https://github.com/sopherapps/scdb/tree/master/docs) 
+You can also look in the [./docs](https://github.com/sopherapps/scdb/tree/master/docs)
 folder of the [rust scdb](https://github.com/sopherapps/scdb) to get up to speed with the internals of scdb e.g.
 
 - [database file format](https://github.com/sopherapps/scdb/tree/master/docs/DB_FILE_FORMAT.md)
@@ -180,11 +180,13 @@ folder of the [rust scdb](https://github.com/sopherapps/scdb) to get up to speed
 scdb is meant to be used in multiple languages of choice. However, the bindings for most of them are yet to be
 developed.
 
-For other programming languages, see the main [README](https://github.com/sopherapps/scdb/tree/master/README.md#bindings)
+For other programming languages, see the
+main [README](https://github.com/sopherapps/scdb/tree/master/README.md#bindings)
 
 ### How to Test
 
-- Ensure you have golang +v1.18 installed. You can check the [official instructions](https://go.dev/doc/install) for how to do that.
+- Ensure you have golang +v1.18 installed. You can check the [official instructions](https://go.dev/doc/install) for how
+  to do that.
 - Clone this repo and enter its root folder
 
 ```shell
@@ -217,6 +219,11 @@ go test -bench=. -run=^#
 
 TBD
 
+## Acknowledgements
+
+- The GopherAcademy Article
+on [avoiding GC overhead with large heaps](https://blog.gopheracademy.com/advent-2018/avoid-gc-overhead-large-heaps/)
+was helpful in the validation of the memory representation of buffers as byte arrays.
 
 ## License
 
