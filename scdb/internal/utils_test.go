@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"github.com/sopherapps/go-scbd/scdb"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -175,5 +176,27 @@ func TestConcatByteArrays(t *testing.T) {
 	for _, record := range testData {
 		got := ConcatByteArrays(record.values...)
 		assert.Equal(t, record.expected, got)
+	}
+}
+
+func TestSafeSlice(t *testing.T) {
+	data := []byte{0, 39, 67, 236, 89, 39, 45, 78}
+	dataLength := uint64(len(data))
+	type testRecord struct {
+		start         uint64
+		end           uint64
+		expectedError error
+		expectedSlice []byte
+	}
+	testData := []testRecord{
+		{0, 3, nil, []byte{0, 39, 67}},
+		{4, 8, nil, []byte{89, 39, 45, 78}},
+		{0, 9, scdb.NewErrOutOfBounds("slice 0 - 9 out of bounds for maxLength 8 for data [0 39 67 236 89 39 45 78]"), nil},
+	}
+
+	for _, record := range testData {
+		got, err := SafeSlice(data, record.start, record.end, dataLength)
+		assert.Equal(t, record.expectedError, err)
+		assert.Equal(t, record.expectedSlice, got)
 	}
 }

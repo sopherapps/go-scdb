@@ -81,7 +81,7 @@ func BoolFromByteArray(v []byte) (bool, error) {
 	if v[0] == 1 {
 		value = true
 	}
-	
+
 	return value, nil
 }
 
@@ -98,4 +98,13 @@ func ConcatByteArrays(arrays ...[]byte) []byte {
 	}
 
 	return output
+}
+
+// SafeSlice slices a slice safely, throwing an error if it goes out of bounds
+func SafeSlice(data []byte, start uint64, end uint64, maxLength uint64) ([]byte, error) {
+	if start >= maxLength || end > maxLength {
+		return nil, scdb.NewErrOutOfBounds(fmt.Sprintf("slice %d - %d out of bounds for maxLength %d for data %v", start, end, maxLength, data))
+	}
+
+	return data[start:end], nil
 }
