@@ -125,3 +125,12 @@ func GenerateFileWithTestData(filePath string, data []byte) (*os.File, error) {
 
 	return file, nil
 }
+
+// ValidateBounds checks if the given range is within bounds or else returns an InvalidData error
+// FIXME: Add test for this
+func ValidateBounds(actualLower uint64, actualUpper uint64, expectedLower uint64, expectedUpper uint64, msg string) error {
+	if actualLower < expectedLower || actualUpper > expectedUpper {
+		return scdb.NewErrOutOfBounds(fmt.Sprintf("%s Span %d-%d is out of bounds for %d-%d", msg, actualLower, actualUpper, expectedLower, expectedUpper))
+	}
+	return nil
+}
