@@ -116,12 +116,12 @@ func (b *Buffer) ReadAt(addr uint64, size uint64) ([]byte, error) {
 // AddrBelongsToKey checks to see if the given address is for the given key
 func (b *Buffer) AddrBelongsToKey(addr uint64, key []byte) (bool, error) {
 	keySize := uint64(len(key))
-	err := internal.ValidateBounds(addr, addr+keySize+8, b.LeftOffset, b.RightOffset, "address out of bounds")
+	err := internal.ValidateBounds(addr, addr+keySize+entries.OffsetForKeyInKVArray, b.LeftOffset, b.RightOffset, "address out of bounds")
 	if err != nil {
 		return false, err
 	}
 
-	lw := addr - b.LeftOffset + 8
+	lw := addr - b.LeftOffset + entries.OffsetForKeyInKVArray
 	keyInData := b.Data[lw : lw+keySize]
 	return bytes.Equal(keyInData, key), nil
 }
@@ -130,12 +130,12 @@ func (b *Buffer) AddrBelongsToKey(addr uint64, key []byte) (bool, error) {
 // It returns false if the kv entry at the given address is not for the given key
 func (b *Buffer) TryDeleteKvEntry(addr uint64, key []byte) (bool, error) {
 	keySize := uint64(len(key))
-	err := internal.ValidateBounds(addr, addr+keySize+8, b.LeftOffset, b.RightOffset, "address out of bounds")
+	err := internal.ValidateBounds(addr, addr+keySize+entries.OffsetForKeyInKVArray, b.LeftOffset, b.RightOffset, "address out of bounds")
 	if err != nil {
 		return false, err
 	}
 
-	keyOffset := addr - b.LeftOffset + 8
+	keyOffset := addr - b.LeftOffset + entries.OffsetForKeyInKVArray
 	keyInData := b.Data[keyOffset : keyOffset+keySize]
 
 	if bytes.Equal(keyInData, key) {

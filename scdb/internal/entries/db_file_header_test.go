@@ -20,9 +20,9 @@ func TestNewDbFileHeader(t *testing.T) {
 	var testMaxKeys uint64 = 24_000_000
 	var testRedundantBlocks uint16 = 5
 	testTable := []testRecord{
-		{nil, nil, generateHeader(1_000_000, 1, blockSize)},
-		{&testMaxKeys, nil, generateHeader(testMaxKeys, 1, blockSize)},
-		{nil, &testRedundantBlocks, generateHeader(1_000_000, testRedundantBlocks, blockSize)},
+		{nil, nil, generateHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize)},
+		{&testMaxKeys, nil, generateHeader(testMaxKeys, DefaultRedundantBlocks, blockSize)},
+		{nil, &testRedundantBlocks, generateHeader(DefaultMaxKeys, testRedundantBlocks, blockSize)},
 		{&testMaxKeys, &testRedundantBlocks, generateHeader(testMaxKeys, testRedundantBlocks, blockSize)},
 	}
 
@@ -52,12 +52,12 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 				data: internal.ConcatByteArrays(
 					titleBytes,
 					blockSizeAsBytes,
-					/* max_keys 1_000_000 */
+					/* max_keys DefaultMaxKeys */
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					/* redundant_blocks 1 */
 					[]byte{0, 1},
 					reserveBytes),
-				expected: generateHeader(1_000_000, 1, blockSize),
+				expected: generateHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize),
 			},
 			{
 				data: internal.ConcatByteArrays(
@@ -68,18 +68,18 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					/* redundant_blocks 1 */
 					[]byte{0, 1},
 					reserveBytes),
-				expected: generateHeader(24_000_000, 1, blockSize),
+				expected: generateHeader(24_000_000, DefaultRedundantBlocks, blockSize),
 			},
 			{
 				data: internal.ConcatByteArrays(
 					titleBytes,
 					blockSizeAsBytes,
-					/* max_keys 1_000_000 */
+					/* max_keys DefaultMaxKeys */
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					/* redundant_blocks 9 */
 					[]byte{0, 9},
 					reserveBytes),
-				expected: generateHeader(1_000_000, 9, blockSize),
+				expected: generateHeader(DefaultMaxKeys, 9, blockSize),
 			},
 			{
 				data: internal.ConcatByteArrays(
@@ -194,12 +194,12 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 				data: internal.ConcatByteArrays(
 					titleBytes,
 					blockSizeAsBytes,
-					/* max_keys 1_000_000 */
+					/* max_keys DefaultMaxKeys */
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					/* redundant_blocks 1 */
 					[]byte{0, 1},
 					reserveBytes),
-				expected: generateHeader(1_000_000, 1, blockSize),
+				expected: generateHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize),
 			},
 			{
 				data: internal.ConcatByteArrays(
@@ -210,18 +210,18 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					/* redundant_blocks 1 */
 					[]byte{0, 1},
 					reserveBytes),
-				expected: generateHeader(24_000_000, 1, blockSize),
+				expected: generateHeader(24_000_000, DefaultRedundantBlocks, blockSize),
 			},
 			{
 				data: internal.ConcatByteArrays(
 					titleBytes,
 					blockSizeAsBytes,
-					/* max_keys 1_000_000 */
+					/* max_keys DefaultMaxKeys */
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					/* redundant_blocks 9 */
 					[]byte{0, 9},
 					reserveBytes),
-				expected: generateHeader(1_000_000, 9, blockSize),
+				expected: generateHeader(DefaultMaxKeys, 9, blockSize),
 			},
 			{
 				data: internal.ConcatByteArrays(
@@ -351,12 +351,12 @@ func TestDbFileHeader_AsBytes(t *testing.T) {
 			expected: internal.ConcatByteArrays(
 				titleBytes,
 				blockSizeAsBytes,
-				/* max_keys 1_000_000 */
+				/* max_keys DefaultMaxKeys */
 				[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 				/* redundant_blocks 1 */
 				[]byte{0, 1},
 				reserveBytes),
-			header: generateHeader(1_000_000, 1, blockSize),
+			header: generateHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize),
 		},
 		{
 			expected: internal.ConcatByteArrays(
@@ -367,18 +367,18 @@ func TestDbFileHeader_AsBytes(t *testing.T) {
 				/* redundant_blocks 1 */
 				[]byte{0, 1},
 				reserveBytes),
-			header: generateHeader(24_000_000, 1, blockSize),
+			header: generateHeader(24_000_000, DefaultRedundantBlocks, blockSize),
 		},
 		{
 			expected: internal.ConcatByteArrays(
 				titleBytes,
 				blockSizeAsBytes,
-				/* max_keys 1_000_000 */
+				/* max_keys DefaultMaxKeys */
 				[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 				/* redundant_blocks 9 */
 				[]byte{0, 9},
 				reserveBytes),
-			header: generateHeader(1_000_000, 9, blockSize),
+			header: generateHeader(DefaultMaxKeys, 9, blockSize),
 		},
 		{
 			expected: internal.ConcatByteArrays(

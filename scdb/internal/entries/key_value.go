@@ -6,6 +6,7 @@ import (
 )
 
 const KeyValueMinSizeInBytes uint32 = 4 + 4 + 8 + 1
+const OffsetForKeyInKVArray uint64 = 8
 
 type KeyValueEntry struct {
 	Size      uint32

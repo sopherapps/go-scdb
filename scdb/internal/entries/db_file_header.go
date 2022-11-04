@@ -10,6 +10,8 @@ import (
 
 const IndexEntrySizeInBytes uint64 = 8
 const HeaderSizeInBytes uint64 = 100
+const DefaultMaxKeys uint64 = 1_000_000
+const DefaultRedundantBlocks uint16 = 1
 
 type DbFileHeader struct {
 	Title               []byte
@@ -31,13 +33,13 @@ func NewDbFileHeader(maxKeys *uint64, redundantBlocks *uint16, blockSize *uint32
 	if maxKeys != nil {
 		header.MaxKeys = *maxKeys
 	} else {
-		header.MaxKeys = 1_000_000
+		header.MaxKeys = DefaultMaxKeys
 	}
 
 	if redundantBlocks != nil {
 		header.RedundantBlocks = *redundantBlocks
 	} else {
-		header.RedundantBlocks = 1
+		header.RedundantBlocks = DefaultRedundantBlocks
 	}
 
 	if blockSize != nil {
