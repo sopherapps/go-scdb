@@ -1,6 +1,7 @@
 package buffers
 
 import (
+	"github.com/sopherapps/go-scbd/scdb/internal"
 	"github.com/sopherapps/go-scbd/scdb/internal/entries"
 	"math"
 	"os"
@@ -139,7 +140,24 @@ func (bp *BufferPool) Append(data []byte) (uint64, error) {
 // if the address is less than entries.HEADER_SIZE_IN_BYTES
 // or (addr + data length) is greater than or equal BufferPool.keyValuesStartPoint
 func (bp *BufferPool) UpdateIndex(addr uint64, data []byte) error {
-	panic("implement me")
+	dataLength := uint64(len(data))
+	err := internal.ValidateBounds(addr, addr+dataLength, entries.HeaderSizeInBytes, bp.keyValuesStartPoint, "data is outside the index bounds")
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < len(bp.indexBuffers); i++ {
+		buf := &bp.indexBuffers[i]
+		if buf.Contains(addr) {
+			err = buf.Replace(addr, data)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	_, err = bp.File.WriteAt(data, int64(addr))
+	return err
 }
 
 // ClearFile clears all data on disk and memory making it like a new store
