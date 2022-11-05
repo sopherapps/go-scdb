@@ -19,7 +19,7 @@ func main() {
 
 	var maxKeys uint64 = 1_000_000
 	var redundantBlocks uint16 = 1
-	var poolCapacity uint = 10
+	var poolCapacity uint64 = 10
 	var compactionInterval uint32 = 1_800
 
 	store, err := scdb.New(
@@ -31,6 +31,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
+	defer func() {
+		_ = store.Close()
+	}()
 
 	// inserting without ttl
 	for k, v := range records {

@@ -7,6 +7,7 @@ import (
 	"github.com/sopherapps/go-scbd/scdb/internal/entries"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -15,7 +16,8 @@ const DefaultDbFile string = "dump.scdb"
 type Store struct {
 	bufferPool *buffers.BufferPool
 	header     *entries.DbFileHeader
-	//scheduler *TaskHandler
+	bgCtrl     chan bool
+	mu         sync.Mutex
 }
 
 // New creates a new Store at the given path
@@ -36,10 +38,31 @@ func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *ui
 		return nil, err
 	}
 
+	interval := 3_600 * time.Second
+	if compactionInterval != nil {
+		interval = time.Duration(*compactionInterval) * time.Second
+	}
+
 	store := &Store{
 		bufferPool: bufferPool,
 		header:     header,
+		bgCtrl:     make(chan bool),
 	}
+
+	go func(done chan bool) {
+		ticker := time.NewTicker(interval)
+		for {
+			select {
+			case <-done:
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				// FIXME: this one just gets a copy of store so the original store
+				//  is unaffected by Compact
+				_ = store.Compact()
+			}
+		}
+	}(store.bgCtrl)
 
 	return store, nil
 }
@@ -47,6 +70,10 @@ func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *ui
 // Set sets the given key value in the store
 // This is used to insert or update any key-value pair in the store
 func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
+	// to handle concurrency
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	expiry := uint64(0)
 	if ttl != nil {
 		expiry = uint64(time.Now().Unix()) + *ttl
@@ -97,6 +124,9 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 
 // Get returns the value corresponding to the given key
 func (s *Store) Get(k []byte) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	initialIdxOffset := s.header.GetIndexOffset(k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
@@ -132,7 +162,11 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 	return nil, nil
 }
 
+// Delete removes the key-value for the given key
 func (s *Store) Delete(k []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	initialIdxOffset := s.header.GetIndexOffset(k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
@@ -168,10 +202,47 @@ func (s *Store) Delete(k []byte) error {
 
 // Clear removes all data in the store
 func (s *Store) Clear() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	return s.bufferPool.ClearFile()
 }
 
+// Compact manually removes dangling key-value pairs in the database file
+//
+// Dangling keys result from either getting expired or being deleted.
+// When a Store.Delete operation is done, the actual key-value pair
+// is just marked as `deleted` but is not removed.
+//
+// Something similar happens when a key-value is updated.
+// A new key-value pair is created and the old one is left un-indexed.
+// Compaction is important because it reclaims this space and reduces the size
+// of the database file.
+//
+// This is done automatically for you at the set `compactionInterval` but you
+// may wish to do it manually for some reason.
+//
+// This is a very expensive operation so use it sparingly.
 func (s *Store) Compact() error {
-	//TODO implement me
-	panic("implement me")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.bufferPool.CompactFile()
+}
+
+// Close frees up any resources occupied by store.
+// After this, the store is unusable. You have to re-instantiate it or just run into
+// some crazy errors
+func (s *Store) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	err := s.bufferPool.Close()
+	if err != nil {
+		return err
+	}
+
+	s.bgCtrl <- true
+	s.header = nil
+	return nil
 }

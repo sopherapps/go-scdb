@@ -144,6 +144,28 @@ func TestNewBufferPool(t *testing.T) {
 	})
 }
 
+func TestBufferPool_Close(t *testing.T) {
+	fileName := "testdb_pool.scdb"
+	defer func() {
+		_ = os.Remove(fileName)
+	}()
+
+	pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("error creating new buffer pool: %s", err)
+	}
+
+	err = pool.Close()
+	if err != nil {
+		t.Fatalf("error closing pool: %s", err)
+	}
+
+	assert.Nil(t, pool.kvBuffers)
+	assert.Nil(t, pool.indexBuffers)
+	// Close has already been called on File
+	assert.NotNil(t, pool.File.Close())
+}
+
 func TestBufferPool_Append(t *testing.T) {
 	fileName := "testdb_pool.scdb"
 	defer func() {

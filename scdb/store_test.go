@@ -2,6 +2,7 @@ package scdb
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"runtime"
@@ -28,6 +29,9 @@ func TestStore_Get(t *testing.T) {
 	dbPath := "testdb_get"
 	removeStore(t, dbPath)
 	store := createStore(t, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
 	insertRecords(t, store, RECORDS, nil)
 
 	t.Run("GetReturnsValueForGivenKey", func(t *testing.T) {
@@ -55,6 +59,9 @@ func TestStore_Set(t *testing.T) {
 			removeStore(t, dbPath)
 		}()
 		store := createStore(t, dbPath, nil)
+		defer func() {
+			_ = store.Close()
+		}()
 		insertRecords(t, store, RECORDS, nil)
 		assertStoreContains(t, store, RECORDS)
 	})
@@ -66,6 +73,9 @@ func TestStore_Set(t *testing.T) {
 		var ttl uint64 = 1
 
 		store := createStore(t, dbPath, nil)
+		defer func() {
+			_ = store.Close()
+		}()
 		insertRecords(t, store, RECORDS[:3], nil)
 		insertRecords(t, store, RECORDS[3:], &ttl)
 
@@ -98,6 +108,9 @@ func TestStore_Set(t *testing.T) {
 		}
 
 		store := createStore(t, dbPath, nil)
+		defer func() {
+			_ = store.Close()
+		}()
 		insertRecords(t, store, RECORDS, nil)
 		insertRecords(t, store, updates, nil)
 		assertStoreContains(t, store, expected)
@@ -109,6 +122,9 @@ func TestStore_Set(t *testing.T) {
 		}()
 		func() {
 			store := createStore(t, dbPath, nil)
+			defer func() {
+				_ = store.Close()
+			}()
 			insertRecords(t, store, RECORDS, nil)
 		}()
 
@@ -117,6 +133,9 @@ func TestStore_Set(t *testing.T) {
 
 		// Open another store
 		store := createStore(t, dbPath, nil)
+		defer func() {
+			_ = store.Close()
+		}()
 		assertStoreContains(t, store, RECORDS)
 	})
 }
@@ -132,6 +151,9 @@ func TestStore_Delete(t *testing.T) {
 		keysToDelete := extractKeysFromRecords(RECORDS[3:])
 
 		store := createStore(t, dbPath, nil)
+		defer func() {
+			_ = store.Close()
+		}()
 		insertRecords(t, store, RECORDS, nil)
 		deleteRecords(t, store, keysToDelete)
 		assertStoreContains(t, store, RECORDS[:3])
@@ -146,6 +168,9 @@ func TestStore_Delete(t *testing.T) {
 
 		func() {
 			store := createStore(t, dbPath, nil)
+			defer func() {
+				_ = store.Close()
+			}()
 			insertRecords(t, store, RECORDS, nil)
 			deleteRecords(t, store, keysToDelete)
 		}()
@@ -155,6 +180,9 @@ func TestStore_Delete(t *testing.T) {
 
 		// open another store
 		store := createStore(t, dbPath, nil)
+		defer func() {
+			_ = store.Close()
+		}()
 		assertStoreContains(t, store, RECORDS[:3])
 		assertKeysDontExist(t, store, keysToDelete)
 	})
@@ -169,6 +197,9 @@ func TestStore_Clear(t *testing.T) {
 			removeStore(t, dbPath)
 		}()
 		store := createStore(t, dbPath, nil)
+		defer func() {
+			_ = store.Close()
+		}()
 		insertRecords(t, store, RECORDS, nil)
 
 		err := store.Clear()
@@ -186,6 +217,9 @@ func TestStore_Clear(t *testing.T) {
 		}()
 		func() {
 			store := createStore(t, dbPath, nil)
+			defer func() {
+				_ = store.Close()
+			}()
 			insertRecords(t, store, RECORDS, nil)
 			err := store.Clear()
 			if err != nil {
@@ -198,6 +232,9 @@ func TestStore_Clear(t *testing.T) {
 
 		// Create new store
 		store := createStore(t, dbPath, nil)
+		defer func() {
+			_ = store.Close()
+		}()
 		allKeys := extractKeysFromRecords(RECORDS)
 		assertKeysDontExist(t, store, allKeys)
 	})
@@ -214,6 +251,9 @@ func TestStore_Compact(t *testing.T) {
 		var ttl uint64 = 1
 
 		store := createStore(t, dbPath, nil)
+		defer func() {
+			_ = store.Close()
+		}()
 		insertRecords(t, store, RECORDS[:3], nil)
 		insertRecords(t, store, RECORDS[3:], &ttl)
 		deleteRecords(t, store, [][]byte{RECORDS[2].k})
@@ -245,6 +285,9 @@ func TestStore_Compact(t *testing.T) {
 		var compactionInterval uint32 = 2
 
 		store := createStore(t, dbPath, &compactionInterval)
+		defer func() {
+			_ = store.Close()
+		}()
 		insertRecords(t, store, RECORDS[:3], nil)
 		insertRecords(t, store, RECORDS[3:], &ttl)
 		deleteRecords(t, store, [][]byte{RECORDS[2].k})
@@ -255,14 +298,47 @@ func TestStore_Compact(t *testing.T) {
 
 		finalFileSize := getFileSize(t, dbPath)
 
-		if finalFileSize >= initialFileSize {
-			t.Errorf("final file size %v should be less than initial file size %v", finalFileSize, initialFileSize)
-		}
-
+		assert.Greater(t, initialFileSize, finalFileSize)
 		nonExistentKeys := extractKeysFromRecords(RECORDS[2:])
 		assertStoreContains(t, store, RECORDS[:2])
 		assertKeysDontExist(t, store, nonExistentKeys)
 	})
+}
+
+func TestStore_Close(t *testing.T) {
+	dbPath := "testdb_close"
+	removeStore(t, dbPath)
+	defer func() {
+		removeStore(t, dbPath)
+	}()
+
+	var ttl uint64 = 1
+	var compactionInterval uint32 = 2
+
+	store := createStore(t, dbPath, &compactionInterval)
+	defer func() {
+		_ = store.Close()
+	}()
+	insertRecords(t, store, RECORDS[:3], nil)
+	insertRecords(t, store, RECORDS[3:], &ttl)
+	deleteRecords(t, store, [][]byte{RECORDS[2].k})
+
+	err := store.Close()
+	if err != nil {
+		t.Fatalf("error closing store: %s", err)
+	}
+
+	initialFileSize := getFileSize(t, dbPath)
+
+	time.Sleep(2 * time.Second)
+
+	finalFileSize := getFileSize(t, dbPath)
+
+	// no compaction done because background tasks have been stopped
+	assert.Equal(t, initialFileSize, finalFileSize)
+	assert.Nil(t, store.header)
+	// already closed buffer pool will throw error
+	assert.Error(t, store.bufferPool.Close())
 }
 
 // removeStore is a utility to remove the old store just before a given test is run

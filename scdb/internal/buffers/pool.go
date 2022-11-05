@@ -103,6 +103,13 @@ func NewBufferPool(capacity *uint64, filePath string, maxKeys *uint64, redundant
 	return pool, nil
 }
 
+// Close closes the buffer pool, freeing up any resources
+func (bp *BufferPool) Close() error {
+	bp.indexBuffers = nil
+	bp.kvBuffers = nil
+	return bp.File.Close()
+}
+
 // Append appends a given data array to the file attached to this buffer pool
 // It returns the address where the data was appended
 func (bp *BufferPool) Append(data []byte) (uint64, error) {

@@ -30,6 +30,7 @@ testdb_set/
 testdb_delete/
 testdb_clear/
 testdb_compact/
+testdb_close/
 db/
 
 # test db files
