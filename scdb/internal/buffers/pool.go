@@ -101,7 +101,36 @@ func NewBufferPool(capacity *uint64, filePath string, maxKeys *uint64, redundant
 // Append appends a given data array to the file attached to this buffer pool
 // It returns the address where the data was appended
 func (bp *BufferPool) Append(data []byte) (uint64, error) {
-	panic("implement me")
+	// loop in reverse, starting at the back
+	// since the latest kv_buffers are the ones updated when new changes occur
+	start := len(bp.kvBuffers) - 1
+	for i := start; i >= 0; i-- {
+		// make sure you get the pointer
+		buf := &bp.kvBuffers[i]
+		if buf.CanAppend(bp.FileSize) {
+			// write the data to buffer
+			addr := buf.Append(data)
+			// update the FileSize of this pool
+			bp.FileSize = buf.RightOffset
+			// write the data to file
+			_, err := bp.File.WriteAt(data, int64(addr))
+			if err != nil {
+				return 0, err
+			}
+
+			return addr, err
+		}
+	}
+
+	addr := bp.FileSize
+	_, err := bp.File.WriteAt(data, int64(addr))
+	if err != nil {
+		return 0, err
+	}
+
+	bp.FileSize += uint64(len(data))
+
+	return addr, nil
 }
 
 // UpdateIndex updates the index at the given address with the new data.
