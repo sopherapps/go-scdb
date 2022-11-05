@@ -312,7 +312,53 @@ func (bp *BufferPool) AddrBelongsToKey(kvAddress uint64, key []byte) (bool, erro
 // If the address is less than [HEADER_SIZE_IN_BYTES] or [BufferPool.key_values_start_point],
 // an ErrOutOfBounds error is returned
 func (bp *BufferPool) ReadIndex(addr uint64) ([]byte, error) {
-	panic("implement me")
+	err := internal.ValidateBounds(addr, addr+entries.IndexEntrySizeInBytes, entries.HeaderSizeInBytes, bp.keyValuesStartPoint, "out of index bounds")
+	if err != nil {
+		return nil, err
+	}
+
+	size := entries.IndexEntrySizeInBytes
+	// starts from buffer with lowest left_offset, which I expect to have more keys
+	idxBufLen := len(bp.indexBuffers)
+	for i := 0; i < idxBufLen; i++ {
+		buf := &bp.indexBuffers[i]
+		if buf.Contains(addr) {
+			return buf.ReadAt(addr, size)
+		}
+	}
+
+	buf := make([]byte, bp.bufferSize)
+	bytesRead, err := bp.File.ReadAt(buf, int64(addr))
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+
+	// update kv_buffers only upto actual data read (cater for partially filled buffer)
+	newIdxBuf := NewBuffer(addr, buf[:bytesRead], bp.bufferSize)
+
+	if uint64(idxBufLen) >= bp.indexCapacity {
+		// we wish to remove the last buf, and replace it with the new one
+		// but maintain the ascending order of LeftOffsets
+		// we will start at the second-last buf and move towards the front of the slice
+		for i := idxBufLen - 2; i >= 0; i-- {
+			currOffset := (&bp.indexBuffers[i]).LeftOffset
+			if currOffset < newIdxBuf.LeftOffset || i == 0 {
+				// copy the new buffer in previous position and stop if
+				// the current buffer has a lower left offset or if we
+				// have reached the end of the array
+				bp.indexBuffers[i-1] = *newIdxBuf
+				break
+			} else {
+				// move current buf backwards
+				bp.indexBuffers[i-1] = bp.indexBuffers[i]
+			}
+		}
+	} else {
+		// Just append
+		bp.indexBuffers = append(bp.indexBuffers, *newIdxBuf)
+	}
+
+	return buf[:size], nil
 }
 
 // Eq checks that other is equal to bp
