@@ -226,9 +226,46 @@ func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*Value, error) {
 }
 
 // TryDeleteKvEntry attempts to delete the key-value entry for the given kv_address as long as the key it holds
-// is the same as the key provided
+// is the same as the key provided. It returns true if successful
 func (bp *BufferPool) TryDeleteKvEntry(kvAddress uint64, key []byte) (bool, error) {
-	panic("implement me")
+	keySize := int64(len(key))
+	addrForIsDeleted := int64(kvAddress+entries.OffsetForKeyInKVArray) + keySize
+	// loop in reverse, starting at the back
+	// since the latest kv_buffers are the ones updated when new changes occur
+	kvBufLen := len(bp.kvBuffers)
+	for i := kvBufLen - 1; i >= 0; i-- {
+		buf := &bp.kvBuffers[i]
+		if buf.Contains(kvAddress) {
+			success, err := buf.TryDeleteKvEntry(kvAddress, key)
+			if err != nil {
+				return false, err
+			}
+
+			if success {
+				// set isDeleted to true i.e. 1
+				_, err = bp.File.WriteAt([]byte{1}, addrForIsDeleted)
+				if err != nil {
+					return false, err
+				}
+				return true, nil
+			}
+		}
+	}
+
+	keyInData, err := extractKeyAsByteArrayFromFile(bp.File, kvAddress, keySize)
+	if err != nil {
+		return false, err
+	}
+
+	if bytes.Equal(keyInData, key) {
+		// set isDeleted to true i.e. 1
+		_, err = bp.File.WriteAt([]byte{1}, addrForIsDeleted)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return false, nil
 }
 
 // AddrBelongsToKey checks to see if the given kv address is for the given key.
@@ -352,4 +389,15 @@ func initializeDbFile(file *os.File, header *entries.DbFileHeader) (int64, error
 	}
 
 	return finalSize, nil
+}
+
+// extractKeyAsByteArrayFromFile extracts the byte array for the key from a given file
+func extractKeyAsByteArrayFromFile(file *os.File, kvAddr uint64, keySize int64) ([]byte, error) {
+	offset := int64(kvAddr + entries.OffsetForKeyInKVArray)
+	buf := make([]byte, keySize)
+	_, err := file.ReadAt(buf, offset)
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
 }
