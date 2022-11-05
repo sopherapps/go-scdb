@@ -438,8 +438,8 @@ func TestBufferPool_CompactFile(t *testing.T) {
 	assert.Equal(t, bufferLen, 0)
 	assert.Equal(t, poolFileSize, finalFileSize)
 	assert.Equal(t, initialFileSize-finalFileSize, expectedFileSizeReduction)
-	assert.Equal(t, expiredKvAddr, 0)
-	assert.Equal(t, deletedKvAddr, 0)
+	assert.Equal(t, expiredKvAddr, uint64(0))
+	assert.Equal(t, deletedKvAddr, uint64(0))
 
 	assert.True(t, keyValueExists(t, dataInFile, header, neverExpires))
 	assert.True(t, keyValueExists(t, dataInFile, header, notExpired))

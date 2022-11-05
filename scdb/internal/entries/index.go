@@ -7,8 +7,8 @@ import (
 )
 
 type blockResult struct {
-	data []byte
-	err  error
+	Data []byte
+	Err  error
 }
 
 // Index is the Representation of the collection
@@ -41,11 +41,11 @@ func (idx *Index) Blocks() <-chan blockResult {
 
 			_, err := idx.file.ReadAt(buf, offset)
 			if err != nil && !errors.Is(err, io.EOF) {
-				ch <- blockResult{data: nil, err: err}
+				ch <- blockResult{Data: nil, Err: err}
 				break
 			}
 
-			ch <- blockResult{data: buf}
+			ch <- blockResult{Data: buf}
 			offset += idx.BlockSize
 		}
 

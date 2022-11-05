@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 )
 
 const DefaultPoolCapacity uint64 = 5
@@ -180,7 +181,103 @@ func (bp *BufferPool) ClearFile() error {
 // CompactFile removes any deleted or expired entries from the file. It must first lock the buffer and the file.
 // In order to be more efficient, it creates a new file, copying only that data which is not deleted or expired
 func (bp *BufferPool) CompactFile() error {
-	panic("implement me")
+	folder := filepath.Dir(bp.FilePath)
+	newFilePath := filepath.Join(folder, "tmp__compact.scdb")
+	newFile, err := os.OpenFile(newFilePath, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+
+	header, err := entries.ExtractDbFileHeaderFromFile(bp.File)
+	if err != nil {
+		return err
+	}
+
+	// Add headers to new file
+	_, err = newFile.WriteAt(header.AsBytes(), 0)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+
+	index := entries.NewIndex(bp.File, header)
+	idxEntrySize := entries.IndexEntrySizeInBytes
+	idxEntrySizeAsInt64 := int64(idxEntrySize)
+	zero := make([]byte, idxEntrySize)
+	zeroStr := string(zero)
+	idxOffset := int64(entries.HeaderSizeInBytes)
+	newFileOffset := int64(header.KeyValuesStartPoint)
+
+	for result := range index.Blocks() {
+		if result.Err != nil && !errors.Is(result.Err, io.EOF) {
+			return result.Err
+		}
+
+		// write index block into new file
+		_, err = newFile.WriteAt(result.Data, idxOffset)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return err
+		}
+
+		idxBlockLength := uint64(len(result.Data))
+		for lwr := uint64(0); lwr < idxBlockLength; lwr += idxEntrySize {
+			upr := lwr + idxEntrySize
+			idxBytes := result.Data[lwr:upr]
+
+			if string(idxBytes) != zeroStr {
+				kvByteArray, e := getKvByteArray(bp.File, idxBytes)
+				if e != nil {
+					return e
+				}
+
+				kv, e := entries.ExtractKeyValueEntryFromByteArray(kvByteArray, 0)
+				if e != nil {
+					return e
+				}
+
+				if !kv.IsExpired() && !kv.IsDeleted {
+					kvSize := int64(len(kvByteArray))
+					// insert key value at the bottom of the new file
+					_, er := newFile.WriteAt(kvByteArray, newFileOffset)
+					if er != nil && !errors.Is(er, io.EOF) {
+						return er
+					}
+
+					// update index to have the index of the newly added key-value entry
+					_, er = newFile.WriteAt(internal.Uint64ToByteArray(uint64(newFileOffset)), idxOffset)
+					if er != nil && !errors.Is(er, io.EOF) {
+						return er
+					}
+					// increment the new file offset
+					newFileOffset += kvSize
+				} else {
+					// if expired or deleted, update index to zero
+					_, er := newFile.WriteAt(zero, idxOffset)
+					if er != nil && !errors.Is(er, io.EOF) {
+						return er
+					}
+				}
+			}
+
+			// increment the index offset
+			idxOffset += idxEntrySizeAsInt64
+		}
+
+	}
+
+	// clean up the buffers and update metadata
+	bp.kvBuffers = make([]Buffer, 0, bp.kvCapacity)
+	bp.indexBuffers = make([]Buffer, 0, bp.indexCapacity)
+	bp.File = newFile
+	bp.FileSize = uint64(newFileOffset)
+
+	// Replace old file with new file
+	err = os.Remove(bp.FilePath)
+	if err != nil {
+		return err
+	}
+
+	err = os.Rename(newFilePath, bp.FilePath)
+	return err
 }
 
 // GetValue returns the *Value at the given address if the key there corresponds to the given key
@@ -446,4 +543,30 @@ func extractKeyAsByteArrayFromFile(file *os.File, kvAddr uint64, keySize int64) 
 		return nil, err
 	}
 	return buf, nil
+}
+
+// getKvByteArray reads a byte array for a key-value entry at the given address in the file
+func getKvByteArray(file *os.File, addrBytes []byte) ([]byte, error) {
+	addrAsUInt64, err := internal.Uint64FromByteArray(addrBytes)
+	if err != nil {
+		return nil, err
+	}
+	addr := int64(addrAsUInt64)
+
+	// get size of the whole key value entry
+	sizeBytes := make([]byte, 4)
+	_, err = file.ReadAt(sizeBytes, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	size, err := internal.Uint32FromByteArray(sizeBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	// get the key value entry itself, basing on the size it has
+	data := make([]byte, size)
+	_, err = file.ReadAt(data, addr)
+	return data, err
 }

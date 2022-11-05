@@ -47,8 +47,8 @@ func TestIndex_Blocks(t *testing.T) {
 		block := 0
 
 		for result := range index.Blocks() {
-			assert.Equal(t, nil, result.err)
-			assert.Equal(t, expectedIndexBlocks[block], result.data)
+			assert.Equal(t, nil, result.Err)
+			assert.Equal(t, expectedIndexBlocks[block], result.Data)
 			block += 1
 		}
 	})
@@ -83,9 +83,9 @@ func TestIndex_Blocks(t *testing.T) {
 		var emptyArray []byte
 
 		for result := range index.Blocks() {
-			errString := fmt.Sprintf("%s", result.err)
+			errString := fmt.Sprintf("%s", result.Err)
 			assert.Equal(t, "read testdb.scdb: file already closed", errString)
-			assert.Equal(t, emptyArray, result.data)
+			assert.Equal(t, emptyArray, result.Data)
 			block += 1
 		}
 
