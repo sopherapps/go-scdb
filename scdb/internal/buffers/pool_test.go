@@ -515,11 +515,6 @@ func TestBufferPool_GetValue(t *testing.T) {
 		expected := ExtractValueFromKeyValueEntry(kv)
 
 		assert.Equal(t, expected, got)
-
-		err = os.Remove(fileName)
-		if err != nil {
-			t.Fatalf("error removing database file: %s", fileName)
-		}
 	})
 
 	t.Run("BufferPool_GetValueForExpiredValueReturnsNil", func(t *testing.T) {
@@ -573,7 +568,7 @@ func TestBufferPool_GetValue(t *testing.T) {
 			t.Fatalf("error getting value: %s", err)
 		}
 
-		assert.Equal(t, kvAddress, 0)
+		assert.Equal(t, kvAddress, uint64(0))
 		assert.Nil(t, got)
 		err = os.Remove(fileName)
 		if err != nil {

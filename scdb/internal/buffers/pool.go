@@ -1,8 +1,11 @@
 package buffers
 
 import (
+	"bytes"
+	"errors"
 	"github.com/sopherapps/go-scbd/scdb/internal"
 	"github.com/sopherapps/go-scbd/scdb/internal/entries"
+	"io"
 	"math"
 	"os"
 )
@@ -183,7 +186,42 @@ func (bp *BufferPool) CompactFile() error {
 // GetValue returns the *Value at the given address if the key there corresponds to the given key
 // Otherwise, it returns nil. This is to handle hash collisions.
 func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*Value, error) {
-	panic("implement me")
+	if kvAddress == 0 {
+		return nil, nil
+	}
+
+	// loop in reverse, starting at the back
+	// since the latest kv_buffers are the ones updated when new changes occur
+	kvBufLen := len(bp.kvBuffers)
+	for i := kvBufLen - 1; i >= 0; i-- {
+		buf := &bp.kvBuffers[i]
+		if buf.Contains(kvAddress) {
+			return buf.GetValue(kvAddress, key)
+		}
+	}
+
+	if uint64(kvBufLen) >= bp.kvCapacity {
+		// Pop front (the oldest entry)
+		bp.kvBuffers = bp.kvBuffers[1:]
+	}
+
+	buf := make([]byte, bp.bufferSize)
+	bytesRead, err := bp.File.ReadAt(buf, int64(kvAddress))
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+
+	bp.kvBuffers = append(bp.kvBuffers, *NewBuffer(kvAddress, buf[:bytesRead], bp.bufferSize))
+	entry, err := entries.ExtractKeyValueEntryFromByteArray(buf, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	if bytes.Equal(entry.Key, key) && !entry.IsExpired() {
+		return ExtractValueFromKeyValueEntry(entry), nil
+	}
+
+	return nil, nil
 }
 
 // TryDeleteKvEntry attempts to delete the key-value entry for the given kv_address as long as the key it holds
