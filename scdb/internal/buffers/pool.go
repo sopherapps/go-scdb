@@ -467,6 +467,7 @@ func (bp *BufferPool) Eq(other *BufferPool) bool {
 		bp.maxKeys == other.maxKeys &&
 		bp.redundantBlocks == other.redundantBlocks &&
 		bp.FilePath == other.FilePath &&
+		bp.File.Name() == other.File.Name() &&
 		len(bp.kvBuffers) == len(other.kvBuffers) &&
 		len(bp.indexBuffers) == len(other.indexBuffers)
 	if !isMetaDataEqual {
@@ -521,7 +522,14 @@ func initializeDbFile(file *os.File, header *entries.DbFileHeader) (int64, error
 	headerLength := int64(len(headerBytes))
 	finalSize := headerLength + int64(header.NumberOfIndexBlocks*header.NetBlockSize)
 
-	err := file.Truncate(finalSize)
+	// First shrink file to zero, to delete all data
+	err := file.Truncate(0)
+	if err != nil {
+		return 0, err
+	}
+
+	// The expand the file again
+	err = file.Truncate(finalSize)
 	if err != nil {
 		return 0, err
 	}

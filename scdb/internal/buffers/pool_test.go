@@ -371,12 +371,43 @@ func TestBufferPool_ClearFile(t *testing.T) {
 	appendKvBuffer(pool, initialOffset, initialData)
 	appendKvBuffer(pool, 0, headerArray)
 
+	headerPreClear, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+	if err != nil {
+		t.Fatalf("error extracting header from pool file: %s", err)
+	}
+
+	kv1 := entries.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
+	kv2 := entries.NewKeyValueEntry([]byte("foo"), []byte("baracuda"), uint64(time.Now().Unix()*2))
+
+	insertKeyValueEntry(t, pool, headerPreClear, kv1)
+	insertKeyValueEntry(t, pool, headerPreClear, kv2)
+
 	err = pool.ClearFile()
 	if err != nil {
 		t.Fatalf("error clearing file: %s", err)
 	}
+	finalFileSize := getActualFileSize(t, fileName)
 
+	header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+	if err != nil {
+		t.Fatalf("error extracting header from pool file: %s", err)
+	}
+
+	// the index should all be reset to zero
+	index := entries.NewIndex(pool.File, header)
+	zeroStr := string(make([]byte, index.BlockSize))
+	for blockResult := range index.Blocks() {
+		if blockResult.Err != nil {
+			t.Fatalf("error reading index: %s", blockResult.Err)
+		}
+
+		assert.Equal(t, string(blockResult.Data), zeroStr)
+	}
+
+	// the metadata of the pool should be reset
 	assert.True(t, pool.Eq(expected))
+	// the file should have gone back to its original file size
+	assert.Equal(t, initialOffset, finalFileSize)
 }
 
 func TestBufferPool_CompactFile(t *testing.T) {
