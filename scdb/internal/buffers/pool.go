@@ -443,11 +443,11 @@ func (bp *BufferPool) ReadIndex(addr uint64) ([]byte, error) {
 				// copy the new buffer in previous position and stop if
 				// the current buffer has a lower left offset or if we
 				// have reached the end of the array
-				bp.indexBuffers[i-1] = *newIdxBuf
+				bp.indexBuffers[i+1] = *newIdxBuf
 				break
 			} else {
 				// move current buf backwards
-				bp.indexBuffers[i-1] = bp.indexBuffers[i]
+				bp.indexBuffers[i+1] = bp.indexBuffers[i]
 			}
 		}
 	} else {

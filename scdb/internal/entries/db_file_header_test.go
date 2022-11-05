@@ -2,7 +2,7 @@ package entries
 
 import (
 	"fmt"
-	"github.com/sopherapps/go-scbd/scdb"
+	"github.com/sopherapps/go-scbd/scdb/errors"
 	"github.com/sopherapps/go-scbd/scdb/internal"
 	"github.com/stretchr/testify/assert"
 	"math"
@@ -107,7 +107,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 	t.Run("ExtractDbFileHeaderFromByteArrayRaisesEErrOutOfBoundsWhenArrayIsTooShort", func(t *testing.T) {
 		type testRecord struct {
 			data     []byte
-			expected *scdb.ErrOutOfBounds
+			expected *errors.ErrOutOfBounds
 		}
 
 		testData := []testRecord{
@@ -119,7 +119,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					[]byte{0, 1},
 					reserveBytes),
-				scdb.NewErrOutOfBounds("header length is 98. expected 100"),
+				errors.NewErrOutOfBounds("header length is 98. expected 100"),
 			},
 			{
 				internal.ConcatByteArrays(
@@ -129,7 +129,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					[]byte{0, 1},
 					reserveBytes),
-				scdb.NewErrOutOfBounds("header length is 99. expected 100"),
+				errors.NewErrOutOfBounds("header length is 99. expected 100"),
 			},
 			{
 				internal.ConcatByteArrays(
@@ -139,7 +139,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					[]byte{0, 15, 66, 64},
 					[]byte{0, 9},
 					reserveBytes),
-				scdb.NewErrOutOfBounds("header length is 96. expected 100"),
+				errors.NewErrOutOfBounds("header length is 96. expected 100"),
 			},
 			{
 				internal.ConcatByteArrays(
@@ -149,7 +149,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					/* redundant_blocks truncated */
 					[]byte{5},
 					reserveBytes),
-				scdb.NewErrOutOfBounds("header length is 99. expected 100"),
+				errors.NewErrOutOfBounds("header length is 99. expected 100"),
 			},
 			{
 				internal.ConcatByteArrays(
@@ -159,7 +159,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					[]byte{0, 5},
 					// reserve bytes truncated
 					reserveBytes[:60]),
-				scdb.NewErrOutOfBounds("header length is 90. expected 100"),
+				errors.NewErrOutOfBounds("header length is 90. expected 100"),
 			},
 		}
 
@@ -258,7 +258,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 		}()
 		type testRecord struct {
 			data     []byte
-			expected *scdb.ErrOutOfBounds
+			expected *errors.ErrOutOfBounds
 		}
 
 		testData := []testRecord{
@@ -270,7 +270,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					[]byte{0, 1},
 					reserveBytes),
-				scdb.NewErrOutOfBounds("header length is 98. expected 100"),
+				errors.NewErrOutOfBounds("header length is 98. expected 100"),
 			},
 			{
 				internal.ConcatByteArrays(
@@ -280,7 +280,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					[]byte{0, 1},
 					reserveBytes),
-				scdb.NewErrOutOfBounds("header length is 99. expected 100"),
+				errors.NewErrOutOfBounds("header length is 99. expected 100"),
 			},
 			{
 				internal.ConcatByteArrays(
@@ -290,7 +290,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					[]byte{0, 15, 66, 64},
 					[]byte{0, 9},
 					reserveBytes),
-				scdb.NewErrOutOfBounds("header length is 96. expected 100"),
+				errors.NewErrOutOfBounds("header length is 96. expected 100"),
 			},
 			{
 				internal.ConcatByteArrays(
@@ -300,7 +300,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					/* redundant_blocks truncated */
 					[]byte{5},
 					reserveBytes),
-				scdb.NewErrOutOfBounds("header length is 99. expected 100"),
+				errors.NewErrOutOfBounds("header length is 99. expected 100"),
 			},
 			{
 				internal.ConcatByteArrays(
@@ -310,7 +310,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					[]byte{0, 5},
 					// reserve bytes truncated
 					reserveBytes[:60]),
-				scdb.NewErrOutOfBounds("header length is 90. expected 100"),
+				errors.NewErrOutOfBounds("header length is 90. expected 100"),
 			},
 		}
 
@@ -429,7 +429,7 @@ func TestDbFileHeader_GetIndexOffsetInNthBlock(t *testing.T) {
 	t.Run("GetIndexOffsetReturnsErrOutOfBoundsIfNIsBeyondNumberOfIndexBlocksInHeader", func(t *testing.T) {
 		for i := numberOfBlocks; i < numberOfBlocks+2; i++ {
 			_, err := dbHeader.GetIndexOffsetInNthBlock(initialOffset, i)
-			expectedError := scdb.NewErrOutOfBounds(fmt.Sprintf("n %d is out of bounds", i))
+			expectedError := errors.NewErrOutOfBounds(fmt.Sprintf("n %d is out of bounds", i))
 			assert.Equal(t, expectedError, err)
 		}
 	})

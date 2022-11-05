@@ -2,7 +2,7 @@ package entries
 
 import (
 	"fmt"
-	"github.com/sopherapps/go-scbd/scdb"
+	"github.com/sopherapps/go-scbd/scdb/errors"
 	"github.com/sopherapps/go-scbd/scdb/internal"
 	"math"
 	"os"
@@ -57,7 +57,7 @@ func NewDbFileHeader(maxKeys *uint64, redundantBlocks *uint16, blockSize *uint32
 func ExtractDbFileHeaderFromByteArray(data []byte) (*DbFileHeader, error) {
 	dataLength := len(data)
 	if dataLength < int(HeaderSizeInBytes) {
-		return nil, scdb.NewErrOutOfBounds(fmt.Sprintf("header length is %d. expected %d", dataLength, HeaderSizeInBytes))
+		return nil, errors.NewErrOutOfBounds(fmt.Sprintf("header length is %d. expected %d", dataLength, HeaderSizeInBytes))
 	}
 
 	title := data[:16]
@@ -91,7 +91,7 @@ func ExtractDbFileHeaderFromFile(file *os.File) (*DbFileHeader, error) {
 	buf := make([]byte, HeaderSizeInBytes)
 	n, err := file.ReadAt(buf, 0)
 	if n < int(HeaderSizeInBytes) {
-		return nil, scdb.NewErrOutOfBounds(fmt.Sprintf("header length is %d. expected %d", n, HeaderSizeInBytes))
+		return nil, errors.NewErrOutOfBounds(fmt.Sprintf("header length is %d. expected %d", n, HeaderSizeInBytes))
 	}
 
 	if err != nil {
@@ -133,7 +133,7 @@ func (h *DbFileHeader) GetIndexOffset(key []byte) uint64 {
 // in the top most index block `n` starts at zero where zero is the top most index block
 func (h *DbFileHeader) GetIndexOffsetInNthBlock(initialOffset uint64, n uint64) (uint64, error) {
 	if n >= h.NumberOfIndexBlocks {
-		return 0, scdb.NewErrOutOfBounds(fmt.Sprintf("n %d is out of bounds", n))
+		return 0, errors.NewErrOutOfBounds(fmt.Sprintf("n %d is out of bounds", n))
 	}
 	num := initialOffset + (h.NetBlockSize * n)
 	return num, nil

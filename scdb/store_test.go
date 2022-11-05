@@ -26,15 +26,21 @@ var RECORDS = []testRecord{
 
 func TestStore_Get(t *testing.T) {
 	dbPath := "testdb_get"
+	removeStore(t, dbPath)
 	store := createStore(t, dbPath, nil)
-	clearStore(t, store)
 	insertRecords(t, store, RECORDS, nil)
 
 	t.Run("GetReturnsValueForGivenKey", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		assertStoreContains(t, store, RECORDS)
 	})
 
 	t.Run("GetReturnsNilForNonExistentKey", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		nonExistentKeys := [][]byte{[]byte("blue"), []byte("green"), []byte("red")}
 		assertKeysDontExist(t, store, nonExistentKeys)
 	})
@@ -42,19 +48,24 @@ func TestStore_Get(t *testing.T) {
 
 func TestStore_Set(t *testing.T) {
 	dbPath := "testdb_set"
+	removeStore(t, dbPath)
 
 	t.Run("SetWithoutTTLInsertsKeyValuesThatNeverExpire", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		store := createStore(t, dbPath, nil)
-		clearStore(t, store)
 		insertRecords(t, store, RECORDS, nil)
 		assertStoreContains(t, store, RECORDS)
 	})
 
 	t.Run("SetWithTTLInsertsKeyValuesThatExpireAfterTTLSeconds", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		var ttl uint64 = 1
 
 		store := createStore(t, dbPath, nil)
-		clearStore(t, store)
 		insertRecords(t, store, RECORDS[:3], nil)
 		insertRecords(t, store, RECORDS[3:], &ttl)
 
@@ -66,6 +77,9 @@ func TestStore_Set(t *testing.T) {
 	})
 
 	t.Run("SetAnExistingKeyUpdatesIt", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		updates := []testRecord{
 			{[]byte("hey"), []byte("Jane")},
 			{[]byte("hi"), []byte("John")},
@@ -84,16 +98,17 @@ func TestStore_Set(t *testing.T) {
 		}
 
 		store := createStore(t, dbPath, nil)
-		clearStore(t, store)
 		insertRecords(t, store, RECORDS, nil)
 		insertRecords(t, store, updates, nil)
 		assertStoreContains(t, store, expected)
 	})
 
 	t.Run("FileIsPersistedToAfterSet", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		func() {
 			store := createStore(t, dbPath, nil)
-			clearStore(t, store)
 			insertRecords(t, store, RECORDS, nil)
 		}()
 
@@ -108,12 +123,15 @@ func TestStore_Set(t *testing.T) {
 
 func TestStore_Delete(t *testing.T) {
 	dbPath := "testdb_delete"
+	removeStore(t, dbPath)
 
 	t.Run("DeleteRemovesKeyValuePair", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		keysToDelete := extractKeysFromRecords(RECORDS[3:])
 
 		store := createStore(t, dbPath, nil)
-		clearStore(t, store)
 		insertRecords(t, store, RECORDS, nil)
 		deleteRecords(t, store, keysToDelete)
 		assertStoreContains(t, store, RECORDS[:3])
@@ -121,12 +139,13 @@ func TestStore_Delete(t *testing.T) {
 	})
 
 	t.Run("FileIsPersistedToAfterDelete", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		keysToDelete := extractKeysFromRecords(RECORDS[3:])
 
 		func() {
 			store := createStore(t, dbPath, nil)
-			clearStore(t, store)
-
 			insertRecords(t, store, RECORDS, nil)
 			deleteRecords(t, store, keysToDelete)
 		}()
@@ -143,8 +162,12 @@ func TestStore_Delete(t *testing.T) {
 
 func TestStore_Clear(t *testing.T) {
 	dbPath := "testdb_clear"
+	removeStore(t, dbPath)
 
 	t.Run("ClearDeletesAllDataInStore", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		store := createStore(t, dbPath, nil)
 		insertRecords(t, store, RECORDS, nil)
 
@@ -158,6 +181,9 @@ func TestStore_Clear(t *testing.T) {
 	})
 
 	t.Run("FileIsPersistedToAfterClear", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		func() {
 			store := createStore(t, dbPath, nil)
 			insertRecords(t, store, RECORDS, nil)
@@ -179,12 +205,15 @@ func TestStore_Clear(t *testing.T) {
 
 func TestStore_Compact(t *testing.T) {
 	dbPath := "testdb_compact"
+	removeStore(t, dbPath)
 
 	t.Run("CompactRemovesDanglingExpiredAndDeletedKeyValuePairsFromFile", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		var ttl uint64 = 1
 
 		store := createStore(t, dbPath, nil)
-		clearStore(t, store)
 		insertRecords(t, store, RECORDS[:3], nil)
 		insertRecords(t, store, RECORDS[3:], &ttl)
 		deleteRecords(t, store, [][]byte{RECORDS[2].k})
@@ -209,11 +238,13 @@ func TestStore_Compact(t *testing.T) {
 	})
 
 	t.Run("BackgroundTaskCompactsAtCompactionInterval", func(t *testing.T) {
+		defer func() {
+			removeStore(t, dbPath)
+		}()
 		var ttl uint64 = 1
 		var compactionInterval uint32 = 2
 
 		store := createStore(t, dbPath, &compactionInterval)
-		clearStore(t, store)
 		insertRecords(t, store, RECORDS[:3], nil)
 		insertRecords(t, store, RECORDS[3:], &ttl)
 		deleteRecords(t, store, [][]byte{RECORDS[2].k})
@@ -234,11 +265,11 @@ func TestStore_Compact(t *testing.T) {
 	})
 }
 
-// clearStore is a utility to clear the store usually just before a given test is run
-func clearStore(t *testing.T, store *Store) {
-	err := store.Clear()
+// removeStore is a utility to remove the old store just before a given test is run
+func removeStore(t *testing.T, path string) {
+	err := os.RemoveAll(path)
 	if err != nil {
-		t.Fatalf("error clearing store: %s", err)
+		t.Fatalf("error removing store: %s", err)
 	}
 }
 

@@ -2,7 +2,7 @@ package entries
 
 import (
 	"fmt"
-	"github.com/sopherapps/go-scbd/scdb"
+	"github.com/sopherapps/go-scbd/scdb/errors"
 	"github.com/sopherapps/go-scbd/scdb/internal"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -41,7 +41,7 @@ func TestExtractKeyValueEntryFromByteArray(t *testing.T) {
 	t.Run("ExtractKeyValueEntryFromByteArrayWithOutOfBoundsOffsetReturnsErrOutOfBounds", func(t *testing.T) {
 		dataArray := internal.ConcatByteArrays([]byte{89, 78}, KvDataArray)
 		_, err := ExtractKeyValueEntryFromByteArray(dataArray, 4)
-		expectedError := scdb.NewErrOutOfBounds(fmt.Sprintf("slice %d - %d out of bounds for maxLength %d for data %v", 12, 222843, len(dataArray), dataArray))
+		expectedError := errors.NewErrOutOfBounds(fmt.Sprintf("slice %d - %d out of bounds for maxLength %d for data %v", 12, 222843, len(dataArray), dataArray))
 		assert.Equal(t, expectedError, err)
 	})
 }

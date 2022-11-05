@@ -3,7 +3,7 @@ package internal
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/sopherapps/go-scbd/scdb"
+	"github.com/sopherapps/go-scbd/scdb/errors"
 	"os"
 )
 
@@ -18,7 +18,7 @@ func Uint16ToByteArray(v uint16) []byte {
 func Uint16FromByteArray(v []byte) (uint16, error) {
 	dataLength := len(v)
 	if dataLength < 2 {
-		return 0, scdb.NewErrOutOfBounds(fmt.Sprintf("byte array length is %d, expected to be 2", dataLength))
+		return 0, errors.NewErrOutOfBounds(fmt.Sprintf("byte array length is %d, expected to be 2", dataLength))
 	}
 
 	num := binary.BigEndian.Uint16(v)
@@ -36,7 +36,7 @@ func Uint32ToByteArray(v uint32) []byte {
 func Uint32FromByteArray(v []byte) (uint32, error) {
 	dataLength := len(v)
 	if dataLength < 4 {
-		return 0, scdb.NewErrOutOfBounds(fmt.Sprintf("byte array length is %d, expected to be 4", dataLength))
+		return 0, errors.NewErrOutOfBounds(fmt.Sprintf("byte array length is %d, expected to be 4", dataLength))
 	}
 
 	num := binary.BigEndian.Uint32(v)
@@ -54,7 +54,7 @@ func Uint64ToByteArray(v uint64) []byte {
 func Uint64FromByteArray(v []byte) (uint64, error) {
 	dataLength := len(v)
 	if dataLength < 8 {
-		return 0, scdb.NewErrOutOfBounds(fmt.Sprintf("byte array length is %d, expected to be 8", dataLength))
+		return 0, errors.NewErrOutOfBounds(fmt.Sprintf("byte array length is %d, expected to be 8", dataLength))
 	}
 
 	num := binary.BigEndian.Uint64(v)
@@ -74,7 +74,7 @@ func BoolToByteArray(v bool) []byte {
 func BoolFromByteArray(v []byte) (bool, error) {
 	dataLength := len(v)
 	if dataLength < 1 {
-		return false, scdb.NewErrOutOfBounds(fmt.Sprintf("byte array length is %d, expected to be 2", dataLength))
+		return false, errors.NewErrOutOfBounds(fmt.Sprintf("byte array length is %d, expected to be 2", dataLength))
 	}
 
 	value := false
@@ -104,7 +104,7 @@ func ConcatByteArrays(arrays ...[]byte) []byte {
 // SafeSlice slices a slice safely, throwing an error if it goes out of bounds
 func SafeSlice(data []byte, start uint64, end uint64, maxLength uint64) ([]byte, error) {
 	if start >= maxLength || end > maxLength {
-		return nil, scdb.NewErrOutOfBounds(fmt.Sprintf("slice %d - %d out of bounds for maxLength %d for data %v", start, end, maxLength, data))
+		return nil, errors.NewErrOutOfBounds(fmt.Sprintf("slice %d - %d out of bounds for maxLength %d for data %v", start, end, maxLength, data))
 	}
 
 	return data[start:end], nil
@@ -130,7 +130,7 @@ func GenerateFileWithTestData(filePath string, data []byte) (*os.File, error) {
 // FIXME: Add test for this
 func ValidateBounds(actualLower uint64, actualUpper uint64, expectedLower uint64, expectedUpper uint64, msg string) error {
 	if actualLower < expectedLower || actualUpper > expectedUpper {
-		return scdb.NewErrOutOfBounds(fmt.Sprintf("%s Span %d-%d is out of bounds for %d-%d", msg, actualLower, actualUpper, expectedLower, expectedUpper))
+		return errors.NewErrOutOfBounds(fmt.Sprintf("%s Span %d-%d is out of bounds for %d-%d", msg, actualLower, actualUpper, expectedLower, expectedUpper))
 	}
 	return nil
 }

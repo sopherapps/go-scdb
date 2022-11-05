@@ -25,6 +25,11 @@ go.work
 
 # test dbs
 testdb/
+testdb_get/
+testdb_set/
+testdb_delete/
+testdb_clear/
+testdb_compact/
 db/
 
 # test db files

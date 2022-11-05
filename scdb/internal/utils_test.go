@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"github.com/sopherapps/go-scbd/scdb"
+	"github.com/sopherapps/go-scbd/scdb/errors"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -191,7 +191,7 @@ func TestSafeSlice(t *testing.T) {
 	testData := []testRecord{
 		{0, 3, nil, []byte{0, 39, 67}},
 		{4, 8, nil, []byte{89, 39, 45, 78}},
-		{0, 9, scdb.NewErrOutOfBounds("slice 0 - 9 out of bounds for maxLength 8 for data [0 39 67 236 89 39 45 78]"), nil},
+		{0, 9, errors.NewErrOutOfBounds("slice 0 - 9 out of bounds for maxLength 8 for data [0 39 67 236 89 39 45 78]"), nil},
 	}
 
 	for _, record := range testData {
