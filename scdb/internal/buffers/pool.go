@@ -211,6 +211,7 @@ func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*Value, error) {
 		return nil, err
 	}
 
+	// update kv_buffers only upto actual data read (cater for partially filled buffer)
 	bp.kvBuffers = append(bp.kvBuffers, *NewBuffer(kvAddress, buf[:bytesRead], bp.bufferSize))
 	entry, err := entries.ExtractKeyValueEntryFromByteArray(buf, 0)
 	if err != nil {
@@ -236,7 +237,37 @@ func (bp *BufferPool) TryDeleteKvEntry(kvAddress uint64, key []byte) (bool, erro
 //
 // It also returns false if the address goes beyond the size of the file
 func (bp *BufferPool) AddrBelongsToKey(kvAddress uint64, key []byte) (bool, error) {
-	panic("implement me")
+	if kvAddress >= bp.FileSize {
+		return false, nil
+	}
+
+	// loop in reverse, starting at the back
+	// since the latest kv_buffers are the ones updated when new changes occur
+	kvBufLen := len(bp.kvBuffers)
+	for i := kvBufLen - 1; i >= 0; i-- {
+		buf := &bp.kvBuffers[i]
+		if buf.Contains(kvAddress) {
+			return buf.AddrBelongsToKey(kvAddress, key)
+		}
+	}
+
+	if uint64(kvBufLen) >= bp.kvCapacity {
+		// Pop front (the oldest entry)
+		bp.kvBuffers = bp.kvBuffers[1:]
+	}
+
+	buf := make([]byte, bp.bufferSize)
+	bytesRead, err := bp.File.ReadAt(buf, int64(kvAddress))
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+
+	// update kv_buffers only upto actual data read (cater for partially filled buffer)
+	bp.kvBuffers = append(bp.kvBuffers, *NewBuffer(kvAddress, buf[:bytesRead], bp.bufferSize))
+
+	keyInFile := buf[entries.OffsetForKeyInKVArray : entries.OffsetForKeyInKVArray+uint64(len(key))]
+	isForKey := bytes.Contains(keyInFile, key)
+	return isForKey, nil
 }
 
 // ReadIndex reads the index at the given address and returns it
