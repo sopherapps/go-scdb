@@ -146,3 +146,10 @@ func (b *Buffer) TryDeleteKvEntry(addr uint64, key []byte) (bool, error) {
 
 	return false, nil
 }
+
+// Eq checks to see if two buffers are equal
+func (b *Buffer) Eq(other *Buffer) bool {
+	return b.LeftOffset == other.LeftOffset &&
+		b.RightOffset == other.RightOffset &&
+		bytes.Equal(b.Data, other.Data)
+}

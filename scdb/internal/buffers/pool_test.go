@@ -75,11 +75,11 @@ func TestNewBufferPool(t *testing.T) {
 				fileSize:        entries.NewDbFileHeader(nil, &testRedundantBlocks, nil).KeyValuesStartPoint,
 			}},
 			{nil, fileName, nil, nil, &testBufferSize, expectedRecord{
-				bufferSize:      uint64(os.Getpagesize()),
+				bufferSize:      uint64(testBufferSize),
 				maxKeys:         entries.DefaultMaxKeys,
 				redundantBlocks: entries.DefaultRedundantBlocks,
 				filePath:        fileName,
-				fileSize:        entries.NewDbFileHeader(nil, &testRedundantBlocks, &testBufferSize).KeyValuesStartPoint,
+				fileSize:        entries.NewDbFileHeader(nil, nil, &testBufferSize).KeyValuesStartPoint,
 			}},
 		}
 
@@ -89,14 +89,14 @@ func TestNewBufferPool(t *testing.T) {
 		for _, record := range testData {
 			got, err := NewBufferPool(record.capacity, record.filePath, record.maxKeys, record.redundantBlocks, record.bufferSize)
 			if err != nil {
-				t.Fatalf("error creating new biffer pool: %s", err)
+				t.Fatalf("error creating new buffer pool: %s", err)
 			}
 
-			assert.Equal(t, got.bufferSize, record.expected.bufferSize)
-			assert.Equal(t, got.maxKeys, record.expected.maxKeys)
-			assert.Equal(t, got.redundantBlocks, record.expected.redundantBlocks)
-			assert.Equal(t, got.FilePath, record.expected.filePath)
-			assert.Equal(t, got.FileSize, record.expected.fileSize)
+			assert.Equal(t, record.expected.bufferSize, got.bufferSize)
+			assert.Equal(t, record.expected.maxKeys, got.maxKeys)
+			assert.Equal(t, record.expected.redundantBlocks, got.redundantBlocks)
+			assert.Equal(t, record.expected.filePath, got.FilePath)
+			assert.Equal(t, record.expected.fileSize, got.FileSize)
 
 			err = os.Remove(got.FilePath)
 			if err != nil {

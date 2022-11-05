@@ -1,8 +1,12 @@
 package buffers
 
-import "os"
+import (
+	"github.com/sopherapps/go-scbd/scdb/internal/entries"
+	"math"
+	"os"
+)
 
-const DEFAULT_POOL_CAPACITY uint64 = 5
+const DefaultPoolCapacity uint64 = 5
 
 // BufferPool is a pool of key-value and index Buffer's.
 //
@@ -27,7 +31,71 @@ type BufferPool struct {
 // NewBufferPool creates a new BufferPool with the given `capacity` number of Buffers and
 // for the file at the given path (creating it if necessary)
 func NewBufferPool(capacity *uint64, filePath string, maxKeys *uint64, redundantBlocks *uint16, bufferSize *uint32) (*BufferPool, error) {
-	panic("implement me")
+	var bufSize uint32
+	if bufferSize != nil {
+		bufSize = *bufferSize
+	} else {
+		bufSize = uint32(os.Getpagesize())
+	}
+
+	var poolCap uint64
+	if capacity != nil {
+		poolCap = *capacity
+	} else {
+		poolCap = DefaultPoolCapacity
+	}
+
+	dbFileExists, err := pathExists(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	fileOpenFlag := os.O_RDWR
+	if !dbFileExists {
+		fileOpenFlag = fileOpenFlag | os.O_CREATE
+	}
+
+	file, err := os.OpenFile(filePath, fileOpenFlag, 0666)
+	if err != nil {
+		return nil, err
+	}
+
+	var header *entries.DbFileHeader
+	if !dbFileExists {
+		header = entries.NewDbFileHeader(maxKeys, redundantBlocks, &bufSize)
+		_, err = initializeDbFile(file, header)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		header, err = entries.ExtractDbFileHeaderFromFile(file)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	fileSize, err := getFileSize(file)
+	if err != nil {
+		return nil, err
+	}
+
+	indexCap := getIndexCapacity(header.NumberOfIndexBlocks, poolCap)
+	kvCap := poolCap - indexCap
+
+	pool := &BufferPool{
+		kvCapacity:          kvCap,
+		indexCapacity:       indexCap,
+		bufferSize:          uint64(bufSize),
+		keyValuesStartPoint: header.KeyValuesStartPoint,
+		maxKeys:             header.MaxKeys,
+		redundantBlocks:     header.RedundantBlocks,
+		kvBuffers:           make([]Buffer, 0, kvCap),
+		indexBuffers:        make([]Buffer, 0, indexCap),
+		File:                file,
+		FilePath:            filePath,
+		FileSize:            fileSize,
+	}
+	return pool, nil
 }
 
 // Append appends a given data array to the file attached to this buffer pool
@@ -87,5 +155,76 @@ func (bp *BufferPool) ReadIndex(addr uint64) ([]byte, error) {
 
 // Eq checks that other is equal to bp
 func (bp *BufferPool) Eq(other *BufferPool) bool {
-	panic("implement me")
+	isMetaDataEqual := bp.kvCapacity == other.kvCapacity &&
+		bp.indexCapacity == other.indexCapacity &&
+		bp.keyValuesStartPoint == other.keyValuesStartPoint &&
+		bp.bufferSize == other.bufferSize &&
+		bp.maxKeys == other.maxKeys &&
+		bp.redundantBlocks == other.redundantBlocks &&
+		bp.FilePath == other.FilePath &&
+		len(bp.kvBuffers) == len(other.kvBuffers) &&
+		len(bp.indexBuffers) == len(other.indexBuffers)
+	if !isMetaDataEqual {
+		return false
+	}
+
+	for i, buf := range bp.kvBuffers {
+		if !buf.Eq(&other.kvBuffers[i]) {
+			return false
+		}
+	}
+
+	for i, buf := range bp.indexBuffers {
+		if !buf.Eq(&other.indexBuffers[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// pathExists checks to see if a given path exists
+func pathExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+
+	return err == nil, err
+}
+
+// getFileSize computes the file size of the given file
+func getFileSize(file *os.File) (uint64, error) {
+	fileStat, err := file.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return uint64(fileStat.Size()), nil
+}
+
+// getIndexCapacity computes the capacity (i.e. number of buffers) of the buffers to be set aside for index buffers
+// It can't be less than 1 and it can't be more than the number of index blocks available
+func getIndexCapacity(numOfIndexBlocks uint64, totalCapacity uint64) uint64 {
+	idxCap := math.Floor(2.0 * float64(totalCapacity) / 3.0)
+	return uint64(math.Max(1, math.Min(idxCap, float64(numOfIndexBlocks))))
+}
+
+// initializeDbFile initializes the database file, giving it the header and the index place holders
+// and truncating it. It returns the new file size
+func initializeDbFile(file *os.File, header *entries.DbFileHeader) (int64, error) {
+	headerBytes := header.AsBytes()
+	headerLength := int64(len(headerBytes))
+	finalSize := headerLength + int64(header.NumberOfIndexBlocks*header.NetBlockSize)
+
+	err := file.Truncate(finalSize)
+	if err != nil {
+		return 0, err
+	}
+
+	_, err = file.WriteAt(headerBytes, 0)
+	if err != nil {
+		return 0, err
+	}
+
+	return finalSize, nil
 }
