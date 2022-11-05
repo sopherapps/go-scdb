@@ -162,7 +162,16 @@ func (bp *BufferPool) UpdateIndex(addr uint64, data []byte) error {
 
 // ClearFile clears all data on disk and memory making it like a new store
 func (bp *BufferPool) ClearFile() error {
-	panic("implement me")
+	bufSize := uint32(bp.bufferSize)
+	header := entries.NewDbFileHeader(&bp.maxKeys, &bp.redundantBlocks, &bufSize)
+	fileSize, err := initializeDbFile(bp.File, header)
+	if err != nil {
+		return err
+	}
+	bp.FileSize = uint64(fileSize)
+	bp.indexBuffers = make([]Buffer, 0, bp.indexCapacity)
+	bp.kvBuffers = make([]Buffer, 0, bp.kvCapacity)
+	return nil
 }
 
 // CompactFile removes any deleted or expired entries from the file. It must first lock the buffer and the file.
