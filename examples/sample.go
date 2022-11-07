@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/sopherapps/go-scbd/scdb"
+	"github.com/sopherapps/go-scdb/scdb"
 	"log"
 )
 

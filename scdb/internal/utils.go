@@ -3,7 +3,7 @@ package internal
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/sopherapps/go-scbd/scdb/errors"
+	"github.com/sopherapps/go-scdb/scdb/errors"
 	"os"
 )
 

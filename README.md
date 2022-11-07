@@ -62,7 +62,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/sopherapps/go-scbd/scdb"
+	"github.com/sopherapps/go-scdb/scdb"
 	"log"
 )
 
@@ -266,7 +266,7 @@ BenchmarkStore_Set/Set_with_ttl:_3600/Set_hola_Spanish-8          116598        
 BenchmarkStore_Set/Set_with_ttl:_3600/Set_oi_Portuguese-8         118916             10084 ns/op
 BenchmarkStore_Set/Set_with_ttl:_3600/Set_mulimuta_Runyoro-8      117501             10001 ns/op
 PASS
-ok      github.com/sopherapps/go-scbd/scdb      69.009s
+ok      github.com/sopherapps/go-scdb/scdb      69.009s
 ```
 
 ## Acknowledgements

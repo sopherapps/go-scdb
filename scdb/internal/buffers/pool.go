@@ -3,8 +3,8 @@ package buffers
 import (
 	"bytes"
 	"errors"
-	"github.com/sopherapps/go-scbd/scdb/internal"
-	"github.com/sopherapps/go-scbd/scdb/internal/entries"
+	"github.com/sopherapps/go-scdb/scdb/internal"
+	"github.com/sopherapps/go-scdb/scdb/internal/entries"
 	"io"
 	"math"
 	"os"

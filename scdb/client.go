@@ -1,7 +1,7 @@
 package scdb
 
 import (
-	"github.com/sopherapps/go-scbd/scdb/internal/store"
+	"github.com/sopherapps/go-scdb/scdb/internal/store"
 )
 
 // Store is the public interface to the key-value store

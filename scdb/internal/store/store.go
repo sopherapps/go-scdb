@@ -1,10 +1,10 @@
 package store
 
 import (
-	"github.com/sopherapps/go-scbd/scdb/errors"
-	"github.com/sopherapps/go-scbd/scdb/internal"
-	"github.com/sopherapps/go-scbd/scdb/internal/buffers"
-	"github.com/sopherapps/go-scbd/scdb/internal/entries"
+	"github.com/sopherapps/go-scdb/scdb/errors"
+	"github.com/sopherapps/go-scdb/scdb/internal"
+	"github.com/sopherapps/go-scdb/scdb/internal/buffers"
+	"github.com/sopherapps/go-scdb/scdb/internal/entries"
 	"os"
 	"path/filepath"
 	"time"

@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"github.com/sopherapps/go-scbd/scdb/errors"
+	"github.com/sopherapps/go-scdb/scdb/errors"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )

@@ -1,7 +1,7 @@
 package buffers
 
 import (
-	"github.com/sopherapps/go-scbd/scdb/internal/entries"
+	"github.com/sopherapps/go-scdb/scdb/internal/entries"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"

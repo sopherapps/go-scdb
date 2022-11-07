@@ -1,7 +1,7 @@
 package entries
 
 import (
-	"github.com/sopherapps/go-scbd/scdb/internal"
+	"github.com/sopherapps/go-scdb/scdb/internal"
 	"time"
 )
 

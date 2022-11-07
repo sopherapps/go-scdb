@@ -1,4 +1,4 @@
-module github.com/sopherapps/go-scbd
+module github.com/sopherapps/go-scdb
 
 go 1.19
 
