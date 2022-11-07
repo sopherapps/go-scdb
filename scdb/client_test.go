@@ -320,7 +320,7 @@ func TestStore_Close(t *testing.T) {
 	insertRecords(t, store, RECORDS[3:], &ttl)
 	deleteRecords(t, store, [][]byte{RECORDS[2].k})
 
-	innerSt := store.getInnerStore()
+	innerStore := store.getInnerStore()
 
 	err := store.Close()
 	if err != nil {
@@ -336,9 +336,9 @@ func TestStore_Close(t *testing.T) {
 	// no compaction done because background tasks have been stopped
 	assert.Equal(t, initialFileSize, finalFileSize)
 
-	assert.Nil(t, innerSt.header)
+	assert.Nil(t, innerStore.Header)
 	// already closed buffer pool will throw error
-	assert.Error(t, innerSt.bufferPool.Close())
+	assert.Error(t, innerStore.BufferPool.Close())
 }
 
 // removeStore is a utility to remove the old store just before a given test is run
