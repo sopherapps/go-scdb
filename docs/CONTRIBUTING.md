@@ -25,7 +25,7 @@ requests:
 5. Make sure your code lints.
 6. Issue that pull request!
 
-## Any contributions you make will be under the MIT and APACHE 2.0 Software Licenses
+## Any contributions you make will be under the MIT
 
 In short, when you submit code changes, your submissions are understood to be under the
 same [MIT License](../LICENSE)
@@ -56,6 +56,7 @@ People *love* thorough bug reports. I'm not even kidding.
 ## Use a Consistent Coding Style
 
 * Use [gofmt](https://pkg.go.dev/cmd/gofmt)
+* Use [cmd/vet](https://pkg.go.dev/cmd/vet) to check for proper formatting
 
 ## License
 
