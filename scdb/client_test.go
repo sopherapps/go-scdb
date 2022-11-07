@@ -395,7 +395,28 @@ func BenchmarkStore_Compact(b *testing.B) {
 	})
 }
 
-func BenchmarkStore_Delete(b *testing.B) {
+func BenchmarkStore_DeleteWithoutTtl(b *testing.B) {
+	dbPath := "testdb_delete"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store
+	store := createStoreForBenchmarks(b, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	insertRecordsForBenchmarks(b, store, RECORDS, nil)
+
+	for _, record := range RECORDS {
+		b.Run(fmt.Sprintf("Delete key %s", record.k), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = store.Delete(record.k)
+			}
+		})
+	}
+}
+
+func BenchmarkStore_DeleteWithTtl(b *testing.B) {
 	dbPath := "testdb_delete"
 	defer removeStoreForBenchmarks(b, dbPath)
 
@@ -406,33 +427,39 @@ func BenchmarkStore_Delete(b *testing.B) {
 	}()
 
 	ttl := uint64(3_600)
+	insertRecordsForBenchmarks(b, store, RECORDS, &ttl)
 
-	b.Run("Delete without ttl", func(b *testing.B) {
-		insertRecordsForBenchmarks(b, store, RECORDS, nil)
-
-		for _, record := range RECORDS {
-			b.Run(fmt.Sprintf("Delete %s", record.k), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					_ = store.Delete(record.k)
-				}
-			})
-		}
-	})
-
-	b.Run(fmt.Sprintf("Delete with ttl %d", ttl), func(b *testing.B) {
-		insertRecordsForBenchmarks(b, store, RECORDS, &ttl)
-
-		for _, record := range RECORDS {
-			b.Run(fmt.Sprintf("Delete %s", record.k), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					_ = store.Delete(record.k)
-				}
-			})
-		}
-	})
+	for _, record := range RECORDS {
+		b.Run(fmt.Sprintf("Delete key %s", record.k), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = store.Delete(record.k)
+			}
+		})
+	}
 }
 
-func BenchmarkStore_Get(b *testing.B) {
+func BenchmarkStore_GetWithoutTtl(b *testing.B) {
+	dbPath := "testdb_get"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store
+	store := createStoreForBenchmarks(b, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	insertRecordsForBenchmarks(b, store, RECORDS, nil)
+
+	for _, record := range RECORDS {
+		b.Run(fmt.Sprintf("Get %s", record.k), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, _ = store.Get(record.k)
+			}
+		})
+	}
+}
+
+func BenchmarkStore_GetWithTtl(b *testing.B) {
 	dbPath := "testdb_get"
 	defer removeStoreForBenchmarks(b, dbPath)
 
@@ -444,32 +471,37 @@ func BenchmarkStore_Get(b *testing.B) {
 
 	ttl := uint64(3_600)
 
-	b.Run("Get without ttl", func(b *testing.B) {
-		insertRecordsForBenchmarks(b, store, RECORDS, nil)
+	insertRecordsForBenchmarks(b, store, RECORDS, &ttl)
 
-		for _, record := range RECORDS {
-			b.Run(fmt.Sprintf("Get %s", record.k), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					_, _ = store.Get(record.k)
-				}
-			})
-		}
-	})
-
-	b.Run(fmt.Sprintf("Get with ttl %d", ttl), func(b *testing.B) {
-		insertRecordsForBenchmarks(b, store, RECORDS, &ttl)
-
-		for _, record := range RECORDS {
-			b.Run(fmt.Sprintf("Get %s", record.k), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					_, _ = store.Get(record.k)
-				}
-			})
-		}
-	})
+	for _, record := range RECORDS {
+		b.Run(fmt.Sprintf("Get %s", record.k), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, _ = store.Get(record.k)
+			}
+		})
+	}
 }
 
-func BenchmarkStore_Set(b *testing.B) {
+func BenchmarkStore_SetWithoutTtl(b *testing.B) {
+	dbPath := "testdb_set"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store
+	store := createStoreForBenchmarks(b, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
+	for _, record := range RECORDS {
+		b.Run(fmt.Sprintf("Set %s %s", record.k, record.v), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = store.Set(record.k, record.v, nil)
+			}
+		})
+	}
+
+}
+
+func BenchmarkStore_SetWithTtl(b *testing.B) {
 	dbPath := "testdb_set"
 	defer removeStoreForBenchmarks(b, dbPath)
 
@@ -481,25 +513,14 @@ func BenchmarkStore_Set(b *testing.B) {
 
 	ttl := uint64(3_600)
 
-	b.Run("Set without ttl", func(b *testing.B) {
-		for _, record := range RECORDS {
-			b.Run(fmt.Sprintf("Set %s %s", record.k, record.v), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					_ = store.Set(record.k, record.v, nil)
-				}
-			})
-		}
-	})
+	for _, record := range RECORDS {
+		b.Run(fmt.Sprintf("Set %s %s", record.k, record.v), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = store.Set(record.k, record.v, &ttl)
+			}
+		})
+	}
 
-	b.Run(fmt.Sprintf("Set with ttl: %d", ttl), func(b *testing.B) {
-		for _, record := range RECORDS {
-			b.Run(fmt.Sprintf("Set %s %s", record.k, record.v), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					_ = store.Set(record.k, record.v, &ttl)
-				}
-			})
-		}
-	})
 }
 
 // removeStore is a utility to remove the old store just before a given test is run
