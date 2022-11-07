@@ -20,6 +20,7 @@ type Store struct {
 	BufferPool         *buffers.BufferPool
 	Header             *entries.DbFileHeader
 	CompactionInterval time.Duration
+	C                  chan Op
 }
 
 // NewStore creates a new Store at the given path, with the given `compactionInterval`
@@ -49,6 +50,7 @@ func NewStore(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacit
 		BufferPool:         bufferPool,
 		Header:             header,
 		CompactionInterval: interval,
+		C:                  make(chan Op),
 	}, nil
 }
 
@@ -213,15 +215,15 @@ func (s *Store) Close() error {
 }
 
 // Open opens the Store and starts receiving an Op's as sent on
-// the `opCh` channel.
+// the Store.C channel.
 // It also starts the background compaction task that runs every Store.CompactionInterval Duration
-func (s *Store) Open(opCh chan Op) {
+func (s *Store) Open() {
 	ticker := time.NewTicker(s.CompactionInterval)
 	for {
 		select {
 		case <-ticker.C:
 			_ = s.Compact()
-		case op := <-opCh:
+		case op := <-s.C:
 			switch op.Type {
 			case CompactOp:
 				err := s.Compact()
@@ -238,8 +240,6 @@ func (s *Store) Open(opCh chan Op) {
 			case SetOp:
 				err := s.Set(op.Key, op.Value, op.Ttl)
 				op.RespChan <- OpResult{Err: err}
-			case GetStoreOp:
-				op.RespChan <- OpResult{Store: s}
 			case CloseOp:
 				ticker.Stop()
 				err := s.Close()

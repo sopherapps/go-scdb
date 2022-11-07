@@ -16,8 +16,6 @@ const (
 	CompactOp
 	// CloseOp for closing the Store
 	CloseOp
-	// GetStoreOp for getting the current Store's instance
-	GetStoreOp
 )
 
 // Op is an Operation that is to be done on a Store

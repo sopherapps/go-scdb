@@ -320,7 +320,7 @@ func TestStore_Close(t *testing.T) {
 	insertRecords(t, store, RECORDS[3:], &ttl)
 	deleteRecords(t, store, [][]byte{RECORDS[2].k})
 
-	innerStore := store.getInnerStore()
+	innerStore := store.store
 
 	err := store.Close()
 	if err != nil {
@@ -337,6 +337,7 @@ func TestStore_Close(t *testing.T) {
 	assert.Equal(t, initialFileSize, finalFileSize)
 
 	assert.Nil(t, innerStore.Header)
+	assert.True(t, store.isClosed)
 	// already closed buffer pool will throw error
 	assert.Error(t, innerStore.BufferPool.Close())
 }

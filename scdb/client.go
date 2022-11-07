@@ -8,7 +8,7 @@ import (
 // that allows us to do operations like Set, Get, Delete, Clear and Compact
 // on the internal.Store
 type Store struct {
-	opCh     chan store.Op
+	store    *store.Store
 	isClosed bool
 }
 
@@ -19,19 +19,15 @@ func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *ui
 		return nil, err
 	}
 
-	opCh := make(chan store.Op)
-	go s.Open(opCh)
-
-	return &Store{
-		opCh: opCh,
-	}, nil
+	go s.Open()
+	return &Store{store: s}, nil
 }
 
 // Set sets the given key value in the store
 // This is used to insert or update any key-value pair in the store
 func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 	respCh := make(chan store.OpResult)
-	s.opCh <- store.Op{
+	s.store.C <- store.Op{
 		Type:     store.SetOp,
 		Key:      k,
 		Value:    v,
@@ -45,7 +41,7 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 // Get returns the value corresponding to the given key
 func (s *Store) Get(k []byte) ([]byte, error) {
 	respCh := make(chan store.OpResult)
-	s.opCh <- store.Op{
+	s.store.C <- store.Op{
 		Type:     store.GetOp,
 		Key:      k,
 		RespChan: respCh,
@@ -57,7 +53,7 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 // Delete removes the key-value for the given key
 func (s *Store) Delete(k []byte) error {
 	respCh := make(chan store.OpResult)
-	s.opCh <- store.Op{
+	s.store.C <- store.Op{
 		Type:     store.DeleteOp,
 		Key:      k,
 		RespChan: respCh,
@@ -69,7 +65,7 @@ func (s *Store) Delete(k []byte) error {
 // Clear removes all data in the store
 func (s *Store) Clear() error {
 	respCh := make(chan store.OpResult)
-	s.opCh <- store.Op{
+	s.store.C <- store.Op{
 		Type:     store.ClearOp,
 		RespChan: respCh,
 	}
@@ -94,7 +90,7 @@ func (s *Store) Clear() error {
 // This is a very expensive operation so use it sparingly.
 func (s *Store) Compact() error {
 	respCh := make(chan store.OpResult)
-	s.opCh <- store.Op{
+	s.store.C <- store.Op{
 		Type:     store.CompactOp,
 		RespChan: respCh,
 	}
@@ -111,7 +107,7 @@ func (s *Store) Close() error {
 	}
 
 	respCh := make(chan store.OpResult)
-	s.opCh <- store.Op{
+	s.store.C <- store.Op{
 		Type:     store.CloseOp,
 		RespChan: respCh,
 	}
@@ -120,20 +116,8 @@ func (s *Store) Close() error {
 		return resp.Err
 	}
 
-	close(s.opCh)
+	close(s.store.C)
 	s.isClosed = true
 
 	return nil
-}
-
-// getInnerStore returns the instance of the inner store
-// to take a peek into it especially for tests
-func (s *Store) getInnerStore() *store.Store {
-	respCh := make(chan store.OpResult)
-	s.opCh <- store.Op{
-		Type:     store.GetStoreOp,
-		RespChan: respCh,
-	}
-	resp := <-respCh
-	return resp.Store
 }
