@@ -352,7 +352,7 @@ func BenchmarkStore_Clear(b *testing.B) {
 		_ = store.Close()
 	}()
 
-	ttl := uint64(1)
+	ttl := uint64(3_600)
 
 	b.Run("Clear", func(b *testing.B) {
 		insertRecordsForBenchmarks(b, store, RECORDS, nil)
@@ -405,7 +405,7 @@ func BenchmarkStore_Delete(b *testing.B) {
 		_ = store.Close()
 	}()
 
-	ttl := uint64(1)
+	ttl := uint64(3_600)
 
 	b.Run("Delete without ttl", func(b *testing.B) {
 		insertRecordsForBenchmarks(b, store, RECORDS, nil)
@@ -442,7 +442,7 @@ func BenchmarkStore_Get(b *testing.B) {
 		_ = store.Close()
 	}()
 
-	ttl := uint64(1)
+	ttl := uint64(3_600)
 
 	b.Run("Get without ttl", func(b *testing.B) {
 		insertRecordsForBenchmarks(b, store, RECORDS, nil)
@@ -479,21 +479,27 @@ func BenchmarkStore_Set(b *testing.B) {
 		_ = store.Close()
 	}()
 
-	ttl := uint64(2)
+	ttl := uint64(3_600)
 
-	for _, record := range RECORDS {
-		b.Run(fmt.Sprintf("Set %s %s", record.k, record.v), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				_ = store.Set(record.k, record.v, nil)
-			}
-		})
+	b.Run("Set without ttl", func(b *testing.B) {
+		for _, record := range RECORDS {
+			b.Run(fmt.Sprintf("Set %s %s", record.k, record.v), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					_ = store.Set(record.k, record.v, nil)
+				}
+			})
+		}
+	})
 
-		b.Run(fmt.Sprintf("Set %s %s with ttl %d", record.k, record.v, ttl), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				_ = store.Set(record.k, record.v, &ttl)
-			}
-		})
-	}
+	b.Run(fmt.Sprintf("Set with ttl: %d", ttl), func(b *testing.B) {
+		for _, record := range RECORDS {
+			b.Run(fmt.Sprintf("Set %s %s", record.k, record.v), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					_ = store.Set(record.k, record.v, &ttl)
+				}
+			})
+		}
+	})
 }
 
 // removeStore is a utility to remove the old store just before a given test is run
