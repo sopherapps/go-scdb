@@ -524,9 +524,8 @@ func TestBufferPool_GetValue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error getting value: %s", err)
 		}
-		expected := ExtractValueFromKeyValueEntry(kv)
 
-		assert.Equal(t, expected, got)
+		assert.Equal(t, kv, got)
 
 		err = os.Remove(fileName)
 		if err != nil {
@@ -564,9 +563,8 @@ func TestBufferPool_GetValue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error getting value: %s", err)
 		}
-		expected := ExtractValueFromKeyValueEntry(kv)
 
-		assert.Equal(t, expected, got)
+		assert.Equal(t, kv, got)
 	})
 
 	t.Run("BufferPool_GetValueForExpiredValueReturnsNil", func(t *testing.T) {
@@ -772,10 +770,6 @@ func TestBufferPool_TryDeleteKvEntry(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error getting value for kv1: %s", err)
 		}
-		expectedValuePostFailedDelete := &Value{
-			Data:    []byte{98, 97, 114},
-			IsStale: false,
-		}
 
 		isDeletedForKv1AddrAndKv1Key, err := pool.TryDeleteKvEntry(kv1Addr, kv1.Key)
 		if err != nil {
@@ -786,15 +780,11 @@ func TestBufferPool_TryDeleteKvEntry(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error getting value for kv1: %s", err)
 		}
-		expectedValuePostSuccessfulDelete := &Value{
-			Data:    []byte{98, 97, 114},
-			IsStale: true,
-		}
 
 		assert.False(t, isDeletedForKv1AddrAndKv2Key)
-		assert.Equal(t, expectedValuePostFailedDelete, kv1ValuePostFailedDelete)
+		assert.Equal(t, kv1, kv1ValuePostFailedDelete)
 		assert.True(t, isDeletedForKv1AddrAndKv1Key)
-		assert.Equal(t, expectedValuePostSuccessfulDelete, kv1ValuePostSuccessfulDelete)
+		assert.Nil(t, kv1ValuePostSuccessfulDelete)
 	})
 
 	t.Run("BufferPool_TryDeleteKvEtnryFromFileDoesJustThat", func(t *testing.T) {
@@ -816,10 +806,6 @@ func TestBufferPool_TryDeleteKvEntry(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error getting value for kv1: %s", err)
 		}
-		expectedValuePostFailedDelete := &Value{
-			Data:    []byte{98, 97, 114},
-			IsStale: false,
-		}
 
 		// clear the buffers
 		pool.kvBuffers = pool.kvBuffers[:0]
@@ -834,15 +820,11 @@ func TestBufferPool_TryDeleteKvEntry(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error getting value for kv1: %s", err)
 		}
-		expectedValuePostSuccessfulDelete := &Value{
-			Data:    []byte{98, 97, 114},
-			IsStale: true,
-		}
 
 		assert.False(t, isDeletedForKv1AddrAndKv2Key)
-		assert.Equal(t, expectedValuePostFailedDelete, kv1ValuePostFailedDelete)
+		assert.Equal(t, kv1, kv1ValuePostFailedDelete)
 		assert.True(t, isDeletedForKv1AddrAndKv1Key)
-		assert.Equal(t, expectedValuePostSuccessfulDelete, kv1ValuePostSuccessfulDelete)
+		assert.Nil(t, kv1ValuePostSuccessfulDelete)
 	})
 }
 

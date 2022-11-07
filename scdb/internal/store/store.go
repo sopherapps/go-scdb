@@ -137,11 +137,9 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 			return nil, err
 		}
 
-		if value.IsStale {
-			return nil, nil
+		if value != nil {
+			return value.Value, nil
 		}
-
-		return value.Data, nil
 	}
 
 	return nil, nil

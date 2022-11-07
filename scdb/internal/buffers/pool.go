@@ -286,9 +286,9 @@ func (bp *BufferPool) CompactFile() error {
 	return err
 }
 
-// GetValue returns the *Value at the given address if the key there corresponds to the given key
+// GetValue returns the *entries.KeyValueEntry at the given address if the key there corresponds to the given key
 // Otherwise, it returns nil. This is to handle hash collisions.
-func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*Value, error) {
+func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*entries.KeyValueEntry, error) {
 	if kvAddress == 0 {
 		return nil, nil
 	}
@@ -321,8 +321,8 @@ func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*Value, error) {
 		return nil, err
 	}
 
-	if bytes.Equal(entry.Key, key) && !entry.IsExpired() {
-		return ExtractValueFromKeyValueEntry(entry), nil
+	if bytes.Equal(entry.Key, key) && !entry.IsExpired() && !entry.IsDeleted {
+		return entry, nil
 	}
 
 	return nil, nil

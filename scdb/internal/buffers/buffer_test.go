@@ -4,7 +4,6 @@ import (
 	"github.com/sopherapps/go-scdb/scdb/internal/entries"
 	"github.com/stretchr/testify/assert"
 	"testing"
-	"time"
 )
 
 var KvDataArray = []byte{
@@ -17,32 +16,6 @@ var KvDataArray = []byte{
 }
 
 const CAPACITY uint64 = 4098
-
-func TestExtractValueFromKeyValueEntry(t *testing.T) {
-	type testRecord struct {
-		kv    *entries.KeyValueEntry
-		value *Value
-	}
-
-	testData := []testRecord{
-		{entries.NewKeyValueEntry([]byte("never_expires"), []byte("barer"), 0), &Value{
-			Data:    []byte{98, 97, 114, 101, 114},
-			IsStale: false,
-		}},
-		{entries.NewKeyValueEntry([]byte("expires"), []byte("Hallelujah"), 1666023836), &Value{
-			Data:    []byte{72, 97, 108, 108, 101, 108, 117, 106, 97, 104},
-			IsStale: true,
-		}},
-		{entries.NewKeyValueEntry([]byte("not_expired"), []byte("bar"), uint64(time.Now().Unix()*2)), &Value{
-			Data:    []byte{98, 97, 114},
-			IsStale: false,
-		}},
-	}
-
-	for _, record := range testData {
-		assert.Equal(t, record.value, ExtractValueFromKeyValueEntry(record.kv))
-	}
-}
 
 func TestBuffer_Contains(t *testing.T) {
 	buf := NewBuffer(79, []byte{72, 97, 108, 108, 101, 108, 117, 106, 97, 104}, CAPACITY)
@@ -141,13 +114,13 @@ func TestBuffer_GetValue(t *testing.T) {
 		type testRecord struct {
 			addr     uint64
 			key      []byte
-			expected *Value
+			expected *entries.KeyValueEntry
 		}
 
 		buf := NewBuffer(79, KvDataArray, CAPACITY)
 		kv := entries.NewKeyValueEntry([]byte("foo"), []byte("bar"), 0)
 		testData := []testRecord{
-			{79, []byte("foo"), ExtractValueFromKeyValueEntry(kv)},
+			{79, []byte("foo"), kv},
 			{79, []byte("bar"), nil},
 		}
 

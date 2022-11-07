@@ -7,11 +7,6 @@ import (
 	"math"
 )
 
-type Value struct {
-	Data    []byte
-	IsStale bool
-}
-
 // Buffer is the in-memory cache for byte arrays read from file
 // Its `LeftOffset` is the file_offset where the byte array `Data` is read from
 // while its `RightOffset` is the *exclusive* upper bound file offset of the same.
@@ -35,14 +30,6 @@ func NewBuffer(leftOffset uint64, data []byte, capacity uint64) *Buffer {
 		Data:        bufData,
 		LeftOffset:  leftOffset,
 		RightOffset: rightOffset,
-	}
-}
-
-// ExtractValueFromKeyValueEntry extracts a *Value from a entries.KeyValueEntry
-func ExtractValueFromKeyValueEntry(kv *entries.KeyValueEntry) *Value {
-	return &Value{
-		Data:    kv.Value,
-		IsStale: kv.IsDeleted || kv.IsExpired(),
 	}
 }
 
@@ -87,17 +74,17 @@ func (b *Buffer) Replace(addr uint64, data []byte) error {
 	return nil
 }
 
-// GetValue returns the *Value at the given address if the key there corresponds to the given key
+// GetValue returns the *entries.KeyValueEntry at the given address if the key there corresponds to the given key
 // Otherwise, it returns nil. This is to handle hash collisions.
-func (b *Buffer) GetValue(addr uint64, key []byte) (*Value, error) {
+func (b *Buffer) GetValue(addr uint64, key []byte) (*entries.KeyValueEntry, error) {
 	offset := addr - b.LeftOffset
 	entry, err := entries.ExtractKeyValueEntryFromByteArray(b.Data, offset)
 	if err != nil {
 		return nil, err
 	}
 
-	if bytes.Equal(entry.Key, key) {
-		return ExtractValueFromKeyValueEntry(entry), nil
+	if bytes.Equal(entry.Key, key) && !entry.IsDeleted && !entry.IsExpired() {
+		return entry, nil
 	}
 	return nil, nil
 }
