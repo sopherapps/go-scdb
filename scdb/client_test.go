@@ -342,11 +342,173 @@ func TestStore_Close(t *testing.T) {
 	assert.Error(t, innerStore.BufferPool.Close())
 }
 
+func BenchmarkStore_Clear(b *testing.B) {
+	dbPath := "testdb_clear"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store
+	store := createStoreForBenchmarks(b, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	ttl := uint64(1)
+
+	b.Run("Clear", func(b *testing.B) {
+		insertRecordsForBenchmarks(b, store, RECORDS, nil)
+
+		for i := 0; i < b.N; i++ {
+			_ = store.Clear()
+		}
+	})
+
+	b.Run(fmt.Sprintf("Clear with ttl: %d", ttl), func(b *testing.B) {
+		insertRecordsForBenchmarks(b, store, RECORDS, nil)
+
+		for i := 0; i < b.N; i++ {
+			_ = store.Clear()
+		}
+	})
+}
+
+func BenchmarkStore_Compact(b *testing.B) {
+	dbPath := "testdb_compact"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store
+	store := createStoreForBenchmarks(b, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	ttl := uint64(1)
+
+	b.Run("Compact", func(b *testing.B) {
+		insertRecordsForBenchmarks(b, store, RECORDS[:3], nil)
+		insertRecordsForBenchmarks(b, store, RECORDS[3:], &ttl)
+		deleteRecordsForBenchmarks(b, store, [][]byte{RECORDS[3].k})
+		time.Sleep(2 * time.Second)
+
+		for i := 0; i < b.N; i++ {
+			_ = store.Compact()
+		}
+	})
+}
+
+func BenchmarkStore_Delete(b *testing.B) {
+	dbPath := "testdb_delete"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store
+	store := createStoreForBenchmarks(b, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	ttl := uint64(1)
+
+	b.Run("Delete without ttl", func(b *testing.B) {
+		insertRecordsForBenchmarks(b, store, RECORDS, nil)
+
+		for _, record := range RECORDS {
+			b.Run(fmt.Sprintf("Delete %s", record.k), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					_ = store.Delete(record.k)
+				}
+			})
+		}
+	})
+
+	b.Run(fmt.Sprintf("Delete with ttl %d", ttl), func(b *testing.B) {
+		insertRecordsForBenchmarks(b, store, RECORDS, &ttl)
+
+		for _, record := range RECORDS {
+			b.Run(fmt.Sprintf("Delete %s", record.k), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					_ = store.Delete(record.k)
+				}
+			})
+		}
+	})
+}
+
+func BenchmarkStore_Get(b *testing.B) {
+	dbPath := "testdb_get"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store
+	store := createStoreForBenchmarks(b, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	ttl := uint64(1)
+
+	b.Run("Get without ttl", func(b *testing.B) {
+		insertRecordsForBenchmarks(b, store, RECORDS, nil)
+
+		for _, record := range RECORDS {
+			b.Run(fmt.Sprintf("Get %s", record.k), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					_, _ = store.Get(record.k)
+				}
+			})
+		}
+	})
+
+	b.Run(fmt.Sprintf("Get with ttl %d", ttl), func(b *testing.B) {
+		insertRecordsForBenchmarks(b, store, RECORDS, &ttl)
+
+		for _, record := range RECORDS {
+			b.Run(fmt.Sprintf("Get %s", record.k), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					_, _ = store.Get(record.k)
+				}
+			})
+		}
+	})
+}
+
+func BenchmarkStore_Set(b *testing.B) {
+	dbPath := "testdb_set"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store
+	store := createStoreForBenchmarks(b, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	ttl := uint64(2)
+
+	for _, record := range RECORDS {
+		b.Run(fmt.Sprintf("Set %s %s", record.k, record.v), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = store.Set(record.k, record.v, nil)
+			}
+		})
+
+		b.Run(fmt.Sprintf("Set %s %s with ttl %d", record.k, record.v, ttl), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = store.Set(record.k, record.v, &ttl)
+			}
+		})
+	}
+}
+
 // removeStore is a utility to remove the old store just before a given test is run
 func removeStore(t *testing.T, path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
 		t.Fatalf("error removing store: %s", err)
+	}
+}
+
+// removeStoreForBenchmarks is a utility to remove the old store just before a given test is run
+func removeStoreForBenchmarks(b *testing.B, path string) {
+	err := os.RemoveAll(path)
+	if err != nil {
+		b.Fatalf("error removing store: %s", err)
 	}
 }
 
@@ -359,12 +521,31 @@ func createStore(t *testing.T, path string, compactionInterval *uint32) *Store {
 	return store
 }
 
+// createStoreForBenchmarks is a utility to create a store at the given path
+func createStoreForBenchmarks(b *testing.B, path string, compactionInterval *uint32) *Store {
+	store, err := New(path, nil, nil, nil, compactionInterval)
+	if err != nil {
+		b.Fatalf("error opening store: %s", err)
+	}
+	return store
+}
+
 // insertRecords inserts the data into the store
 func insertRecords(t *testing.T, store *Store, data []testRecord, ttl *uint64) {
 	for _, record := range data {
 		err := store.Set(record.k, record.v, ttl)
 		if err != nil {
-			t.Fatalf("error inserting without ttl: %s", err)
+			t.Fatalf("error inserting key value: %s", err)
+		}
+	}
+}
+
+// insertRecordsForBenchmarks inserts the data into the store
+func insertRecordsForBenchmarks(b *testing.B, store *Store, data []testRecord, ttl *uint64) {
+	for _, record := range data {
+		err := store.Set(record.k, record.v, ttl)
+		if err != nil {
+			b.Fatalf("error inserting key value: %s", err)
 		}
 	}
 }
@@ -374,7 +555,17 @@ func deleteRecords(t *testing.T, store *Store, keys [][]byte) {
 	for _, k := range keys {
 		err := store.Delete(k)
 		if err != nil {
-			t.Fatalf("error inserting without ttl: %s", err)
+			t.Fatalf("error deleting key: %s", err)
+		}
+	}
+}
+
+// deleteRecordsForBenchmarks deletes the given keys from the store
+func deleteRecordsForBenchmarks(b *testing.B, store *Store, keys [][]byte) {
+	for _, k := range keys {
+		err := store.Delete(k)
+		if err != nil {
+			b.Fatalf("error deleting key: %s", err)
 		}
 	}
 }
@@ -400,22 +591,12 @@ func getFileSize(t *testing.T, dbPath string) int64 {
 	return stats.Size()
 }
 
-// areByteArraysEqual checks whether two byte arrays are equal
-func areByteArraysEqual(first []byte, second []byte) bool {
-	return fmt.Sprintf("%v", first) == fmt.Sprintf("%v", second)
-}
-
 // assertStoreContains asserts that the store contains these given records
 func assertStoreContains(t *testing.T, store *Store, records []testRecord) {
 	for _, record := range records {
 		got, err := store.Get(record.k)
-		if err != nil {
-			t.Fatalf("error retrieving key for %s: %s", record.k, err)
-		}
-
-		if !areByteArraysEqual(got, record.v) {
-			t.Errorf("value for key '%s', expected: %v, got: %v", record.k, record.v, got)
-		}
+		assert.Nil(t, err)
+		assert.Equal(t, record.v, got)
 	}
 }
 
@@ -423,12 +604,7 @@ func assertStoreContains(t *testing.T, store *Store, records []testRecord) {
 func assertKeysDontExist(t *testing.T, store *Store, keys [][]byte) {
 	for _, k := range keys {
 		got, err := store.Get(k)
-		if err != nil {
-			t.Fatalf("error retrieving key for %s: %s", k, err)
-		}
-
-		if got != nil {
-			t.Errorf("value for key '%s', expected: %v, got: %v", k, nil, got)
-		}
+		assert.Nil(t, err)
+		assert.Nil(t, got)
 	}
 }
