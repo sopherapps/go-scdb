@@ -6,7 +6,6 @@ import (
 	"github.com/sopherapps/go-scdb/scdb/internal/entries"
 	"github.com/stretchr/testify/assert"
 	"os"
-	"sort"
 	"testing"
 	"time"
 )
@@ -304,7 +303,7 @@ func TestBufferPool_UpdateIndex(t *testing.T) {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
 
-		initialOffset := entries.HeaderSizeInBytes + 4
+		initialOffset := entries.HeaderSizeInBytes
 		initialFileSize := pool.FileSize
 
 		writeToFile(t, fileName, int64(initialOffset), initialData)
@@ -318,7 +317,7 @@ func TestBufferPool_UpdateIndex(t *testing.T) {
 		dataInFile, bytesRead := readFromFile(t, fileName, int64(initialOffset), newDataLength)
 		actualFileSize := getActualFileSize(t, fileName)
 		finalFileSize := pool.FileSize
-		buf := pool.indexBuffers[0]
+		buf := pool.indexBuffers[initialOffset]
 
 		// assert things in file
 		assert.Equal(t, initialFileSize, finalFileSize)
@@ -758,43 +757,93 @@ func TestBufferPool_TryDeleteKvEntry(t *testing.T) {
 		t.Fatalf("error extracting db file header from file: %s", err)
 	}
 
-	insertKeyValueEntry(t, pool, header, kv1)
-	insertKeyValueEntry(t, pool, header, kv2)
+	t.Run("BufferPool_TryDeleteKvEntryFromBufferDoesJustThat", func(t *testing.T) {
+		insertKeyValueEntry(t, pool, header, kv1)
+		insertKeyValueEntry(t, pool, header, kv2)
 
-	kv1Addr := getKvAddress(t, pool, header, kv1)
+		kv1Addr := getKvAddress(t, pool, header, kv1)
 
-	isDeletedForKv1AddrAndKv2Key, err := pool.TryDeleteKvEntry(kv1Addr, kv2.Key)
-	if err != nil {
-		t.Fatalf("error trying to delete kv1 with kv2 key: %s", err)
-	}
+		isDeletedForKv1AddrAndKv2Key, err := pool.TryDeleteKvEntry(kv1Addr, kv2.Key)
+		if err != nil {
+			t.Fatalf("error trying to delete kv1 with kv2 key: %s", err)
+		}
 
-	kv1ValuePostFailedDelete, err := pool.GetValue(kv1Addr, kv1.Key)
-	if err != nil {
-		t.Fatalf("error getting value for kv1: %s", err)
-	}
-	expectedValuePostFailedDelete := &Value{
-		Data:    []byte{98, 97, 114},
-		IsStale: false,
-	}
+		kv1ValuePostFailedDelete, err := pool.GetValue(kv1Addr, kv1.Key)
+		if err != nil {
+			t.Fatalf("error getting value for kv1: %s", err)
+		}
+		expectedValuePostFailedDelete := &Value{
+			Data:    []byte{98, 97, 114},
+			IsStale: false,
+		}
 
-	isDeletedForKv1AddrAndKv1Key, err := pool.TryDeleteKvEntry(kv1Addr, kv1.Key)
-	if err != nil {
-		t.Fatalf("error trying to delete kv1 with kv1 key: %s", err)
-	}
+		isDeletedForKv1AddrAndKv1Key, err := pool.TryDeleteKvEntry(kv1Addr, kv1.Key)
+		if err != nil {
+			t.Fatalf("error trying to delete kv1 with kv1 key: %s", err)
+		}
 
-	kv1ValuePostSuccessfulDelete, err := pool.GetValue(kv1Addr, kv1.Key)
-	if err != nil {
-		t.Fatalf("error getting value for kv1: %s", err)
-	}
-	expectedValuePostSuccessfulDelete := &Value{
-		Data:    []byte{98, 97, 114},
-		IsStale: true,
-	}
+		kv1ValuePostSuccessfulDelete, err := pool.GetValue(kv1Addr, kv1.Key)
+		if err != nil {
+			t.Fatalf("error getting value for kv1: %s", err)
+		}
+		expectedValuePostSuccessfulDelete := &Value{
+			Data:    []byte{98, 97, 114},
+			IsStale: true,
+		}
 
-	assert.False(t, isDeletedForKv1AddrAndKv2Key)
-	assert.Equal(t, expectedValuePostFailedDelete, kv1ValuePostFailedDelete)
-	assert.True(t, isDeletedForKv1AddrAndKv1Key)
-	assert.Equal(t, expectedValuePostSuccessfulDelete, kv1ValuePostSuccessfulDelete)
+		assert.False(t, isDeletedForKv1AddrAndKv2Key)
+		assert.Equal(t, expectedValuePostFailedDelete, kv1ValuePostFailedDelete)
+		assert.True(t, isDeletedForKv1AddrAndKv1Key)
+		assert.Equal(t, expectedValuePostSuccessfulDelete, kv1ValuePostSuccessfulDelete)
+	})
+
+	t.Run("BufferPool_TryDeleteKvEtnryFromFileDoesJustThat", func(t *testing.T) {
+		insertKeyValueEntry(t, pool, header, kv1)
+		insertKeyValueEntry(t, pool, header, kv2)
+
+		// clear the buffers
+		pool.kvBuffers = pool.kvBuffers[:0]
+		pool.indexBuffers = make(map[uint64]*Buffer, pool.indexCapacity)
+
+		kv1Addr := getKvAddress(t, pool, header, kv1)
+
+		isDeletedForKv1AddrAndKv2Key, err := pool.TryDeleteKvEntry(kv1Addr, kv2.Key)
+		if err != nil {
+			t.Fatalf("error trying to delete kv1 with kv2 key: %s", err)
+		}
+
+		kv1ValuePostFailedDelete, err := pool.GetValue(kv1Addr, kv1.Key)
+		if err != nil {
+			t.Fatalf("error getting value for kv1: %s", err)
+		}
+		expectedValuePostFailedDelete := &Value{
+			Data:    []byte{98, 97, 114},
+			IsStale: false,
+		}
+
+		// clear the buffers
+		pool.kvBuffers = pool.kvBuffers[:0]
+		pool.indexBuffers = make(map[uint64]*Buffer, pool.indexCapacity)
+
+		isDeletedForKv1AddrAndKv1Key, err := pool.TryDeleteKvEntry(kv1Addr, kv1.Key)
+		if err != nil {
+			t.Fatalf("error trying to delete kv1 with kv1 key: %s", err)
+		}
+
+		kv1ValuePostSuccessfulDelete, err := pool.GetValue(kv1Addr, kv1.Key)
+		if err != nil {
+			t.Fatalf("error getting value for kv1: %s", err)
+		}
+		expectedValuePostSuccessfulDelete := &Value{
+			Data:    []byte{98, 97, 114},
+			IsStale: true,
+		}
+
+		assert.False(t, isDeletedForKv1AddrAndKv2Key)
+		assert.Equal(t, expectedValuePostFailedDelete, kv1ValuePostFailedDelete)
+		assert.True(t, isDeletedForKv1AddrAndKv1Key)
+		assert.Equal(t, expectedValuePostSuccessfulDelete, kv1ValuePostSuccessfulDelete)
+	})
 }
 
 func TestBufferPool_ReadIndex(t *testing.T) {
@@ -899,15 +948,12 @@ func getActualFileSize(t *testing.T, filePath string) uint64 {
 
 // appendKvBuffer creates a new Buffer with the given leftOffset and appends it to the pool's kvBuffers
 func appendKvBuffer(pool *BufferPool, leftOffset uint64, data []byte) {
-	pool.kvBuffers = append(pool.kvBuffers, *NewBuffer(leftOffset, data, pool.bufferSize))
+	pool.kvBuffers = append(pool.kvBuffers, NewBuffer(leftOffset, data, pool.bufferSize))
 }
 
 // appendIndexBuffer creates a new Buffer with the given leftOffset and appends it to the pool's indexBuffers
 func appendIndexBuffer(pool *BufferPool, leftOffset uint64, data []byte) {
-	pool.indexBuffers = append(pool.indexBuffers, *NewBuffer(leftOffset, data, pool.bufferSize))
-	sort.Slice(pool.indexBuffers, func(i, j int) bool {
-		return pool.indexBuffers[i].LeftOffset < pool.indexBuffers[j].LeftOffset
-	})
+	pool.indexBuffers[leftOffset] = NewBuffer(leftOffset, data, pool.bufferSize)
 }
 
 // writeToFile writes the given data to the file at the given offset

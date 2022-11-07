@@ -26,8 +26,8 @@ type BufferPool struct {
 	keyValuesStartPoint uint64
 	maxKeys             uint64
 	redundantBlocks     uint16
-	kvBuffers           []Buffer // this will act as a FIFO
-	indexBuffers        []Buffer // this will act as a min-slice where the buffer with the biggest left-offset is replaced
+	kvBuffers           []*Buffer // this will act as a FIFO
+	indexBuffers        map[uint64]*Buffer
 	File                *os.File
 	FilePath            string
 	FileSize            uint64
@@ -94,8 +94,8 @@ func NewBufferPool(capacity *uint64, filePath string, maxKeys *uint64, redundant
 		keyValuesStartPoint: header.KeyValuesStartPoint,
 		maxKeys:             header.MaxKeys,
 		redundantBlocks:     header.RedundantBlocks,
-		kvBuffers:           make([]Buffer, 0, kvCap),
-		indexBuffers:        make([]Buffer, 0, indexCap),
+		kvBuffers:           make([]*Buffer, 0, kvCap),
+		indexBuffers:        make(map[uint64]*Buffer, indexCap),
 		File:                file,
 		FilePath:            filePath,
 		FileSize:            fileSize,
@@ -118,7 +118,7 @@ func (bp *BufferPool) Append(data []byte) (uint64, error) {
 	start := len(bp.kvBuffers) - 1
 	for i := start; i >= 0; i-- {
 		// make sure you get the pointer
-		buf := &bp.kvBuffers[i]
+		buf := bp.kvBuffers[i]
 		if buf.CanAppend(bp.FileSize) {
 			// write the data to buffer
 			addr := buf.Append(data)
@@ -157,13 +157,12 @@ func (bp *BufferPool) UpdateIndex(addr uint64, data []byte) error {
 		return err
 	}
 
-	for i := 0; i < len(bp.indexBuffers); i++ {
-		buf := &bp.indexBuffers[i]
-		if buf.Contains(addr) {
-			err = buf.Replace(addr, data)
-			if err != nil {
-				return err
-			}
+	blockLeftOffset := bp.getBlockLeftOffset(addr, entries.HeaderSizeInBytes)
+	buf, ok := bp.indexBuffers[blockLeftOffset]
+	if ok {
+		err = buf.Replace(addr, data)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -180,8 +179,8 @@ func (bp *BufferPool) ClearFile() error {
 		return err
 	}
 	bp.FileSize = uint64(fileSize)
-	bp.indexBuffers = make([]Buffer, 0, bp.indexCapacity)
-	bp.kvBuffers = make([]Buffer, 0, bp.kvCapacity)
+	bp.indexBuffers = make(map[uint64]*Buffer, bp.indexCapacity)
+	bp.kvBuffers = bp.kvBuffers[:0]
 	return nil
 }
 
@@ -272,8 +271,8 @@ func (bp *BufferPool) CompactFile() error {
 	}
 
 	// clean up the buffers and update metadata
-	bp.kvBuffers = make([]Buffer, 0, bp.kvCapacity)
-	bp.indexBuffers = make([]Buffer, 0, bp.indexCapacity)
+	bp.kvBuffers = bp.kvBuffers[:0]
+	bp.indexBuffers = make(map[uint64]*Buffer, bp.indexCapacity)
 	bp.File = newFile
 	bp.FileSize = uint64(newFileOffset)
 
@@ -298,7 +297,7 @@ func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*Value, error) {
 	// since the latest kv_buffers are the ones updated when new changes occur
 	kvBufLen := len(bp.kvBuffers)
 	for i := kvBufLen - 1; i >= 0; i-- {
-		buf := &bp.kvBuffers[i]
+		buf := bp.kvBuffers[i]
 		if buf.Contains(kvAddress) {
 			return buf.GetValue(kvAddress, key)
 		}
@@ -316,7 +315,7 @@ func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*Value, error) {
 	}
 
 	// update kv_buffers only upto actual data read (cater for partially filled buffer)
-	bp.kvBuffers = append(bp.kvBuffers, *NewBuffer(kvAddress, buf[:bytesRead], bp.bufferSize))
+	bp.kvBuffers = append(bp.kvBuffers, NewBuffer(kvAddress, buf[:bytesRead], bp.bufferSize))
 	entry, err := entries.ExtractKeyValueEntryFromByteArray(buf, 0)
 	if err != nil {
 		return nil, err
@@ -338,7 +337,7 @@ func (bp *BufferPool) TryDeleteKvEntry(kvAddress uint64, key []byte) (bool, erro
 	// since the latest kv_buffers are the ones updated when new changes occur
 	kvBufLen := len(bp.kvBuffers)
 	for i := kvBufLen - 1; i >= 0; i-- {
-		buf := &bp.kvBuffers[i]
+		buf := bp.kvBuffers[i]
 		if buf.Contains(kvAddress) {
 			success, err := buf.TryDeleteKvEntry(kvAddress, key)
 			if err != nil {
@@ -367,6 +366,8 @@ func (bp *BufferPool) TryDeleteKvEntry(kvAddress uint64, key []byte) (bool, erro
 		if err != nil {
 			return false, err
 		}
+
+		return true, nil
 	}
 
 	return false, nil
@@ -386,7 +387,7 @@ func (bp *BufferPool) AddrBelongsToKey(kvAddress uint64, key []byte) (bool, erro
 	// since the latest kv_buffers are the ones updated when new changes occur
 	kvBufLen := len(bp.kvBuffers)
 	for i := kvBufLen - 1; i >= 0; i-- {
-		buf := &bp.kvBuffers[i]
+		buf := bp.kvBuffers[i]
 		if buf.Contains(kvAddress) {
 			return buf.AddrBelongsToKey(kvAddress, key)
 		}
@@ -404,7 +405,7 @@ func (bp *BufferPool) AddrBelongsToKey(kvAddress uint64, key []byte) (bool, erro
 	}
 
 	// update kv_buffers only upto actual data read (cater for partially filled buffer)
-	bp.kvBuffers = append(bp.kvBuffers, *NewBuffer(kvAddress, buf[:bytesRead], bp.bufferSize))
+	bp.kvBuffers = append(bp.kvBuffers, NewBuffer(kvAddress, buf[:bytesRead], bp.bufferSize))
 
 	keyInFile := buf[entries.OffsetForKeyInKVArray : entries.OffsetForKeyInKVArray+uint64(len(key))]
 	isForKey := bytes.Contains(keyInFile, key)
@@ -421,48 +422,47 @@ func (bp *BufferPool) ReadIndex(addr uint64) ([]byte, error) {
 		return nil, err
 	}
 
-	size := entries.IndexEntrySizeInBytes
-	// starts from buffer with lowest left_offset, which I expect to have more keys
-	idxBufLen := len(bp.indexBuffers)
-	for i := 0; i < idxBufLen; i++ {
-		buf := &bp.indexBuffers[i]
-		if buf.Contains(addr) {
-			return buf.ReadAt(addr, size)
-		}
+	blockLeftOffset := bp.getBlockLeftOffset(addr, entries.HeaderSizeInBytes)
+	buf, ok := bp.indexBuffers[blockLeftOffset]
+	if ok {
+		return buf.ReadAt(addr, entries.IndexEntrySizeInBytes)
 	}
 
-	buf := make([]byte, bp.bufferSize)
-	bytesRead, err := bp.File.ReadAt(buf, int64(addr))
+	data := make([]byte, bp.bufferSize)
+	// Index buffers should have preset boundaries matching
+	// 		StartOfIndex - StartOfIndex + BlockSize,
+	//		StartOfIndex + BlockSize - StartOfIndex + (2*BlockSize)
+	//		StartOfIndex + (2*BlockSize) - StartOfIndex + (3*BlockSize) ...
+	_, err = bp.File.ReadAt(data, int64(blockLeftOffset))
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
 
-	// update kv_buffers only upto actual data read (cater for partially filled buffer)
-	newIdxBuf := NewBuffer(addr, buf[:bytesRead], bp.bufferSize)
-
-	if uint64(idxBufLen) >= bp.indexCapacity {
-		// we wish to remove the last buf, and replace it with the new one
-		// but maintain the ascending order of LeftOffsets
-		// we will start at the second-last buf and move towards the front of the slice
-		for i := idxBufLen - 2; i >= 0; i-- {
-			currOffset := (&bp.indexBuffers[i]).LeftOffset
-			if currOffset < newIdxBuf.LeftOffset || i == 0 {
-				// copy the new buffer in previous position and stop if
-				// the current buffer has a lower left offset or if we
-				// have reached the end of the array
-				bp.indexBuffers[i+1] = *newIdxBuf
-				break
-			} else {
-				// move current buf backwards
-				bp.indexBuffers[i+1] = bp.indexBuffers[i]
+	if uint64(len(bp.indexBuffers)) >= bp.indexCapacity {
+		biggestLeftOffset := uint64(0)
+		for lftOffset, _ := range bp.indexBuffers {
+			if lftOffset >= biggestLeftOffset {
+				biggestLeftOffset = lftOffset
 			}
 		}
+
+		// delete the buffer with the biggest left offset as those with lower left offsets
+		// are expected to have more keys
+		delete(bp.indexBuffers, biggestLeftOffset)
+		bp.indexBuffers[blockLeftOffset] = NewBuffer(blockLeftOffset, data, bp.bufferSize)
 	} else {
-		// Just append
-		bp.indexBuffers = append(bp.indexBuffers, *newIdxBuf)
+		bp.indexBuffers[blockLeftOffset] = NewBuffer(blockLeftOffset, data, bp.bufferSize)
 	}
 
-	return buf[:size], nil
+	start := addr - blockLeftOffset
+	return data[start : start+entries.IndexEntrySizeInBytes], nil
+}
+
+// getBlockLeftOffset returns the left offset for the block in which the address is to be found
+func (bp *BufferPool) getBlockLeftOffset(addr uint64, minOffset uint64) uint64 {
+	blockPosition := (addr - minOffset) / bp.bufferSize
+	blockLeftOffset := (blockPosition * bp.bufferSize) + minOffset
+	return blockLeftOffset
 }
 
 // Eq checks that other is equal to bp
@@ -482,13 +482,13 @@ func (bp *BufferPool) Eq(other *BufferPool) bool {
 	}
 
 	for i, buf := range bp.kvBuffers {
-		if !buf.Eq(&other.kvBuffers[i]) {
+		if !buf.Eq(other.kvBuffers[i]) {
 			return false
 		}
 	}
 
 	for i, buf := range bp.indexBuffers {
-		if !buf.Eq(&other.indexBuffers[i]) {
+		if !buf.Eq(other.indexBuffers[i]) {
 			return false
 		}
 	}

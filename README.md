@@ -220,58 +220,58 @@ On a average PC
 
 ``` 
 cpu: Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-BenchmarkStore_Clear/Clear-8               37508             47812 ns/op
-BenchmarkStore_Clear/Clear_with_ttl:_3600-8                36679             33528 ns/op
-BenchmarkStore_Compact/Compact-8                               1        2060734507 ns/op
-BenchmarkStore_DeleteWithoutTtl/Delete_key_hey-8             295           4212383 ns/op
-BenchmarkStore_DeleteWithoutTtl/Delete_key_hi-8              296           4168765 ns/op
-BenchmarkStore_DeleteWithoutTtl/Delete_key_salut-8           291           4046971 ns/op
-BenchmarkStore_DeleteWithoutTtl/Delete_key_bonjour-8                 291           4096394 ns/op
-BenchmarkStore_DeleteWithoutTtl/Delete_key_hola-8                    292           4093013 ns/op
-BenchmarkStore_DeleteWithoutTtl/Delete_key_oi-8                      291           4068893 ns/op
-BenchmarkStore_DeleteWithoutTtl/Delete_key_mulimuta-8                292           4055143 ns/op
-BenchmarkStore_DeleteWithTtl/Delete_key_hey-8                        295           4223834 ns/op
-BenchmarkStore_DeleteWithTtl/Delete_key_hi-8                         294           4043806 ns/op
-BenchmarkStore_DeleteWithTtl/Delete_key_salut-8                      295           4062765 ns/op
-BenchmarkStore_DeleteWithTtl/Delete_key_bonjour-8                    292           4084699 ns/op
-BenchmarkStore_DeleteWithTtl/Delete_key_hola-8                       296           4027317 ns/op
-BenchmarkStore_DeleteWithTtl/Delete_key_oi-8                         295           4029108 ns/op
-BenchmarkStore_DeleteWithTtl/Delete_key_mulimuta-8                   294           4036959 ns/op
-BenchmarkStore_GetWithoutTtl/Get_hey-8                           1233544               957.2 ns/op
-BenchmarkStore_GetWithoutTtl/Get_hi-8                            1247316               954.0 ns/op
-BenchmarkStore_GetWithoutTtl/Get_salut-8                         1235551               958.0 ns/op
-BenchmarkStore_GetWithoutTtl/Get_bonjour-8                       1231387               966.3 ns/op
-BenchmarkStore_GetWithoutTtl/Get_hola-8                          1260361               954.3 ns/op
-BenchmarkStore_GetWithoutTtl/Get_oi-8                            1254897               967.6 ns/op
-BenchmarkStore_GetWithoutTtl/Get_mulimuta-8                      1253518               954.6 ns/op
-BenchmarkStore_GetWithTtl/Get_hey-8                               997819              1122 ns/op
-BenchmarkStore_GetWithTtl/Get_hi-8                               1000000              1431 ns/op
-BenchmarkStore_GetWithTtl/Get_salut-8                             925994              1334 ns/op
-BenchmarkStore_GetWithTtl/Get_bonjour-8                           995365              1140 ns/op
-BenchmarkStore_GetWithTtl/Get_hola-8                             1000000              1111 ns/op
-BenchmarkStore_GetWithTtl/Get_oi-8                               1000000              1121 ns/op
-BenchmarkStore_GetWithTtl/Get_mulimuta-8                          994162              1123 ns/op
-BenchmarkStore_SetWithoutTtl/Set_hey_English-8                    174813              7341 ns/op
-BenchmarkStore_SetWithoutTtl/Set_hi_English-8                     119372              9074 ns/op
-BenchmarkStore_SetWithoutTtl/Set_salut_French-8                   122444              9230 ns/op
-BenchmarkStore_SetWithoutTtl/Set_bonjour_French-8                 128853              9415 ns/op
-BenchmarkStore_SetWithoutTtl/Set_hola_Spanish-8                   128820              9161 ns/op
-BenchmarkStore_SetWithoutTtl/Set_oi_Portuguese-8                  124173              9182 ns/op
-BenchmarkStore_SetWithoutTtl/Set_mulimuta_Runyoro-8               129810              9204 ns/op
-BenchmarkStore_SetWithTtl/Set_hey_English-8                       166344              7143 ns/op
-BenchmarkStore_SetWithTtl/Set_hi_English-8                        110610              9474 ns/op
-BenchmarkStore_SetWithTtl/Set_salut_French-8                      120817              9377 ns/op
-BenchmarkStore_SetWithTtl/Set_bonjour_French-8                    126235              9426 ns/op
-BenchmarkStore_SetWithTtl/Set_hola_Spanish-8                      126758              9440 ns/op
-BenchmarkStore_SetWithTtl/Set_oi_Portuguese-8                     128312              9403 ns/op
-BenchmarkStore_SetWithTtl/Set_mulimuta_Runyoro-8                  123814              9273 ns/op
+BenchmarkStore_Clear/Clear-8               37342             31261 ns/op
+BenchmarkStore_Clear/Clear_with_ttl:_3600-8                37086             31756 ns/op
+BenchmarkStore_Compact/Compact-8                               1        2070248915 ns/op
+BenchmarkStore_DeleteWithoutTtl/Delete_key_hey-8          284754              5521 ns/op
+BenchmarkStore_DeleteWithoutTtl/Delete_key_hi-8           185820              6594 ns/op
+BenchmarkStore_DeleteWithoutTtl/Delete_key_salut-8        177535              6735 ns/op
+BenchmarkStore_DeleteWithoutTtl/Delete_key_bonjour-8              179936              6525 ns/op
+BenchmarkStore_DeleteWithoutTtl/Delete_key_hola-8                 177618              6735 ns/op
+BenchmarkStore_DeleteWithoutTtl/Delete_key_oi-8                   173463              6704 ns/op
+BenchmarkStore_DeleteWithoutTtl/Delete_key_mulimuta-8             175621              6668 ns/op
+BenchmarkStore_DeleteWithTtl/Delete_key_hey-8                     280477              4010 ns/op
+BenchmarkStore_DeleteWithTtl/Delete_key_hi-8                      307460              6632 ns/op
+BenchmarkStore_DeleteWithTtl/Delete_key_salut-8                   194413              6775 ns/op
+BenchmarkStore_DeleteWithTtl/Delete_key_bonjour-8                 180406              6496 ns/op
+BenchmarkStore_DeleteWithTtl/Delete_key_hola-8                    184796              6556 ns/op
+BenchmarkStore_DeleteWithTtl/Delete_key_oi-8                      178884              6620 ns/op
+BenchmarkStore_DeleteWithTtl/Delete_key_mulimuta-8                185463              6597 ns/op
+BenchmarkStore_GetWithoutTtl/Get_hey-8                           1000000              1024 ns/op
+BenchmarkStore_GetWithoutTtl/Get_hi-8                            1000000              1031 ns/op
+BenchmarkStore_GetWithoutTtl/Get_salut-8                         1000000              1032 ns/op
+BenchmarkStore_GetWithoutTtl/Get_bonjour-8                        996567              1030 ns/op
+BenchmarkStore_GetWithoutTtl/Get_hola-8                          1131050              1031 ns/op
+BenchmarkStore_GetWithoutTtl/Get_oi-8                            1000000              1030 ns/op
+BenchmarkStore_GetWithoutTtl/Get_mulimuta-8                      1000000              1023 ns/op
+BenchmarkStore_GetWithTtl/Get_hey-8                               989518              1171 ns/op
+BenchmarkStore_GetWithTtl/Get_hi-8                                990582              1158 ns/op
+BenchmarkStore_GetWithTtl/Get_salut-8                             961626              1167 ns/op
+BenchmarkStore_GetWithTtl/Get_bonjour-8                           996882              1168 ns/op
+BenchmarkStore_GetWithTtl/Get_hola-8                              988996              1162 ns/op
+BenchmarkStore_GetWithTtl/Get_oi-8                                989503              1165 ns/op
+BenchmarkStore_GetWithTtl/Get_mulimuta-8                         1000000              1155 ns/op
+BenchmarkStore_SetWithoutTtl/Set_hey_English-8                    164676              8012 ns/op
+BenchmarkStore_SetWithoutTtl/Set_hi_English-8                     112162              9356 ns/op
+BenchmarkStore_SetWithoutTtl/Set_salut_French-8                   127788              9220 ns/op
+BenchmarkStore_SetWithoutTtl/Set_bonjour_French-8                 129494              9266 ns/op
+BenchmarkStore_SetWithoutTtl/Set_hola_Spanish-8                   120920              9238 ns/op
+BenchmarkStore_SetWithoutTtl/Set_oi_Portuguese-8                  123501              9433 ns/op
+BenchmarkStore_SetWithoutTtl/Set_mulimuta_Runyoro-8               126140              9325 ns/op
+BenchmarkStore_SetWithTtl/Set_hey_English-8                       168462              7154 ns/op
+BenchmarkStore_SetWithTtl/Set_hi_English-8                        126549              9474 ns/op
+BenchmarkStore_SetWithTtl/Set_salut_French-8                      123495              9541 ns/op
+BenchmarkStore_SetWithTtl/Set_bonjour_French-8                    118657              9908 ns/op
+BenchmarkStore_SetWithTtl/Set_hola_Spanish-8                      120117              9700 ns/op
+BenchmarkStore_SetWithTtl/Set_oi_Portuguese-8                     120649              9792 ns/op
+BenchmarkStore_SetWithTtl/Set_mulimuta_Runyoro-8                  119839              9718 ns/op
 PASS
-ok      github.com/sopherapps/go-scdb/scdb      71.282s
+ok      github.com/sopherapps/go-scdb/scdb      62.450s
 ```
 
 ## TODO
 
-- [ ] Optimize `Delete` operation
+- [ ] Optimize `Get` operation
 - [ ] Optimize the `Compact` operation
 
 ## Acknowledgements

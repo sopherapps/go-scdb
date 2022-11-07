@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"github.com/sopherapps/go-scdb/scdb/errors"
 	"github.com/sopherapps/go-scdb/scdb/internal"
 	"github.com/sopherapps/go-scdb/scdb/internal/buffers"
@@ -12,6 +13,8 @@ import (
 
 // DefaultDbFile is the default name of the database file that contains all the key-value pairs
 const DefaultDbFile string = "dump.scdb"
+
+var ZeroU64 = internal.Uint64ToByteArray(0)
 
 // Store is the actual store of the key-value pairs
 // It contains the BufferPool which in turn interfaces with both the memory
@@ -120,23 +123,25 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 			return nil, err
 		}
 
+		if bytes.Equal(kvOffsetInBytes, ZeroU64) {
+			continue
+		}
+
 		kvOffset, err := internal.Uint64FromByteArray(kvOffsetInBytes)
 		if err != nil {
 			return nil, err
 		}
 
-		if kvOffset != 0 {
-			value, err := s.BufferPool.GetValue(kvOffset, k)
-			if err != nil {
-				return nil, err
-			}
-
-			if value.IsStale {
-				return nil, nil
-			} else {
-				return value.Data, nil
-			}
+		value, err := s.BufferPool.GetValue(kvOffset, k)
+		if err != nil {
+			return nil, err
 		}
+
+		if value.IsStale {
+			return nil, nil
+		}
+
+		return value.Data, nil
 	}
 
 	return nil, nil
@@ -157,21 +162,24 @@ func (s *Store) Delete(k []byte) error {
 			return err
 		}
 
+		if bytes.Equal(kvOffsetInBytes, ZeroU64) {
+			continue
+		}
+
 		kvOffset, err := internal.Uint64FromByteArray(kvOffsetInBytes)
 		if err != nil {
 			return err
 		}
 
-		if kvOffset != 0 {
-			isOffsetForKey, err := s.BufferPool.TryDeleteKvEntry(kvOffset, k)
-			if err != nil {
-				return err
-			}
-
-			if isOffsetForKey {
-				return nil
-			} // else continue looping
+		isOffsetForKey, err := s.BufferPool.TryDeleteKvEntry(kvOffset, k)
+		if err != nil {
+			return err
 		}
+
+		if isOffsetForKey {
+			return nil
+		} // else continue looping
+
 	}
 
 	return nil // if it is not found, no error is thrown
