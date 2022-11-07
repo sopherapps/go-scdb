@@ -1,103 +1,37 @@
 package scdb
 
 import (
-	"github.com/sopherapps/go-scbd/scdb/internal/buffers"
-	"github.com/sopherapps/go-scbd/scdb/internal/entries"
 	"github.com/sopherapps/go-scbd/scdb/internal/store"
-	"os"
-	"path/filepath"
-	"time"
 )
-
-// DefaultDbFile is the default name of the database file that contains all the key-value pairs
-const DefaultDbFile string = "dump.scdb"
 
 // Store is the public interface to the key-value store
 // that allows us to do operations like Set, Get, Delete, Clear and Compact
 // on the internal.Store
 type Store struct {
-	ch       chan store.Op
+	opCh     chan store.Op
 	isClosed bool
 }
 
 // New creates a new Store at the given path
 func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *uint64, compactionInterval *uint32) (*Store, error) {
-	err := os.MkdirAll(path, 0755)
+	s, err := store.NewStore(path, maxKeys, redundantBlocks, poolCapacity, compactionInterval)
 	if err != nil {
 		return nil, err
 	}
 
-	dbFilePath := filepath.Join(path, DefaultDbFile)
-	bufferPool, err := buffers.NewBufferPool(poolCapacity, dbFilePath, maxKeys, redundantBlocks, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	header, err := entries.ExtractDbFileHeaderFromFile(bufferPool.File)
-	if err != nil {
-		return nil, err
-	}
-
-	interval := 3_600 * time.Second
-	if compactionInterval != nil {
-		interval = time.Duration(*compactionInterval) * time.Second
-	}
-
-	actionCh := make(chan store.Op)
-	s := &store.Store{
-		BufferPool: bufferPool,
-		Header:     header,
-	}
-
-	go openStore(s, actionCh, interval)
+	opCh := make(chan store.Op)
+	go s.Open(opCh)
 
 	return &Store{
-		ch: actionCh,
+		opCh: opCh,
 	}, nil
-}
-
-// openStore opens the internal.Store and starts receiving an internal.Op's as sent on
-// the `opCh` channel. It also starts the background compaction task that runs every `compactionInterval` Duration
-func openStore(s *store.Store, opCh chan store.Op, compactionInterval time.Duration) {
-	ticker := time.NewTicker(compactionInterval)
-	for {
-		select {
-		case <-ticker.C:
-			_ = s.Compact()
-		case op := <-opCh:
-			switch op.Type {
-			case store.CompactOp:
-				err := s.Compact()
-				op.RespChan <- store.OpResult{Err: err}
-			case store.ClearOp:
-				err := s.Clear()
-				op.RespChan <- store.OpResult{Err: err}
-			case store.DeleteOp:
-				err := s.Delete(op.Key)
-				op.RespChan <- store.OpResult{Err: err}
-			case store.GetOp:
-				v, err := s.Get(op.Key)
-				op.RespChan <- store.OpResult{Err: err, Value: v}
-			case store.SetOp:
-				err := s.Set(op.Key, op.Value, op.Ttl)
-				op.RespChan <- store.OpResult{Err: err}
-			case store.GetStoreOp:
-				op.RespChan <- store.OpResult{Store: s}
-			case store.CloseOp:
-				ticker.Stop()
-				err := s.Close()
-				op.RespChan <- store.OpResult{Err: err}
-				return
-			}
-		}
-	}
 }
 
 // Set sets the given key value in the store
 // This is used to insert or update any key-value pair in the store
 func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 	respCh := make(chan store.OpResult)
-	s.ch <- store.Op{
+	s.opCh <- store.Op{
 		Type:     store.SetOp,
 		Key:      k,
 		Value:    v,
@@ -111,7 +45,7 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 // Get returns the value corresponding to the given key
 func (s *Store) Get(k []byte) ([]byte, error) {
 	respCh := make(chan store.OpResult)
-	s.ch <- store.Op{
+	s.opCh <- store.Op{
 		Type:     store.GetOp,
 		Key:      k,
 		RespChan: respCh,
@@ -123,7 +57,7 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 // Delete removes the key-value for the given key
 func (s *Store) Delete(k []byte) error {
 	respCh := make(chan store.OpResult)
-	s.ch <- store.Op{
+	s.opCh <- store.Op{
 		Type:     store.DeleteOp,
 		Key:      k,
 		RespChan: respCh,
@@ -135,7 +69,7 @@ func (s *Store) Delete(k []byte) error {
 // Clear removes all data in the store
 func (s *Store) Clear() error {
 	respCh := make(chan store.OpResult)
-	s.ch <- store.Op{
+	s.opCh <- store.Op{
 		Type:     store.ClearOp,
 		RespChan: respCh,
 	}
@@ -160,7 +94,7 @@ func (s *Store) Clear() error {
 // This is a very expensive operation so use it sparingly.
 func (s *Store) Compact() error {
 	respCh := make(chan store.OpResult)
-	s.ch <- store.Op{
+	s.opCh <- store.Op{
 		Type:     store.CompactOp,
 		RespChan: respCh,
 	}
@@ -177,7 +111,7 @@ func (s *Store) Close() error {
 	}
 
 	respCh := make(chan store.OpResult)
-	s.ch <- store.Op{
+	s.opCh <- store.Op{
 		Type:     store.CloseOp,
 		RespChan: respCh,
 	}
@@ -186,7 +120,7 @@ func (s *Store) Close() error {
 		return resp.Err
 	}
 
-	close(s.ch)
+	close(s.opCh)
 	s.isClosed = true
 
 	return nil
@@ -196,7 +130,7 @@ func (s *Store) Close() error {
 // to take a peek into it especially for tests
 func (s *Store) getInnerStore() *store.Store {
 	respCh := make(chan store.OpResult)
-	s.ch <- store.Op{
+	s.opCh <- store.Op{
 		Type:     store.GetStoreOp,
 		RespChan: respCh,
 	}

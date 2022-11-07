@@ -5,15 +5,51 @@ import (
 	"github.com/sopherapps/go-scbd/scdb/internal"
 	"github.com/sopherapps/go-scbd/scdb/internal/buffers"
 	"github.com/sopherapps/go-scbd/scdb/internal/entries"
+	"os"
+	"path/filepath"
 	"time"
 )
+
+// DefaultDbFile is the default name of the database file that contains all the key-value pairs
+const DefaultDbFile string = "dump.scdb"
 
 // Store is the actual store of the key-value pairs
 // It contains the BufferPool which in turn interfaces with both the memory
 // and the disk to keep, retrieve and delete key-value pairs
 type Store struct {
-	BufferPool *buffers.BufferPool
-	Header     *entries.DbFileHeader
+	BufferPool         *buffers.BufferPool
+	Header             *entries.DbFileHeader
+	CompactionInterval time.Duration
+}
+
+// NewStore creates a new Store at the given path, with the given `compactionInterval`
+func NewStore(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *uint64, compactionInterval *uint32) (*Store, error) {
+	err := os.MkdirAll(path, 0755)
+	if err != nil {
+		return nil, err
+	}
+
+	dbFilePath := filepath.Join(path, DefaultDbFile)
+	bufferPool, err := buffers.NewBufferPool(poolCapacity, dbFilePath, maxKeys, redundantBlocks, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	header, err := entries.ExtractDbFileHeaderFromFile(bufferPool.File)
+	if err != nil {
+		return nil, err
+	}
+
+	interval := 3_600 * time.Second
+	if compactionInterval != nil {
+		interval = time.Duration(*compactionInterval) * time.Second
+	}
+
+	return &Store{
+		BufferPool:         bufferPool,
+		Header:             header,
+		CompactionInterval: interval,
+	}, nil
 }
 
 // Set sets the given key value in the store
@@ -174,4 +210,42 @@ func (s *Store) Close() error {
 
 	s.Header = nil
 	return nil
+}
+
+// Open opens the Store and starts receiving an Op's as sent on
+// the `opCh` channel.
+// It also starts the background compaction task that runs every Store.CompactionInterval Duration
+func (s *Store) Open(opCh chan Op) {
+	ticker := time.NewTicker(s.CompactionInterval)
+	for {
+		select {
+		case <-ticker.C:
+			_ = s.Compact()
+		case op := <-opCh:
+			switch op.Type {
+			case CompactOp:
+				err := s.Compact()
+				op.RespChan <- OpResult{Err: err}
+			case ClearOp:
+				err := s.Clear()
+				op.RespChan <- OpResult{Err: err}
+			case DeleteOp:
+				err := s.Delete(op.Key)
+				op.RespChan <- OpResult{Err: err}
+			case GetOp:
+				v, err := s.Get(op.Key)
+				op.RespChan <- OpResult{Err: err, Value: v}
+			case SetOp:
+				err := s.Set(op.Key, op.Value, op.Ttl)
+				op.RespChan <- OpResult{Err: err}
+			case GetStoreOp:
+				op.RespChan <- OpResult{Store: s}
+			case CloseOp:
+				ticker.Stop()
+				err := s.Close()
+				op.RespChan <- OpResult{Err: err}
+				return
+			}
+		}
+	}
 }
