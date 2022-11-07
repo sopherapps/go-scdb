@@ -7,17 +7,45 @@ import (
 	"github.com/sopherapps/go-scbd/scdb/internal/entries"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 )
 
 const DefaultDbFile string = "dump.scdb"
 
+type ActionType uint
+
+const (
+	setAction ActionType = iota
+	getAction
+	deleteAction
+	clearAction
+	compactAction
+	closeAction
+	getStoreInstance
+)
+
+type Action struct {
+	Type     ActionType
+	key      []byte
+	value    []byte
+	ttl      *uint64
+	respChan chan ActionResult
+}
+
+type ActionResult struct {
+	err   error
+	value []byte
+	store *innerStore
+}
+
 type Store struct {
+	ch       chan Action
+	isClosed bool
+}
+
+type innerStore struct {
 	bufferPool *buffers.BufferPool
 	header     *entries.DbFileHeader
-	bgCtrl     chan bool
-	mu         sync.Mutex
 }
 
 // New creates a new Store at the given path
@@ -43,37 +71,56 @@ func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *ui
 		interval = time.Duration(*compactionInterval) * time.Second
 	}
 
-	store := &Store{
-		bufferPool: bufferPool,
-		header:     header,
-		bgCtrl:     make(chan bool),
-	}
+	actionCh := make(chan Action)
 
-	go func(done chan bool) {
+	go func(actionChannel chan Action) {
+		store := &innerStore{
+			bufferPool: bufferPool,
+			header:     header,
+		}
+
 		ticker := time.NewTicker(interval)
 		for {
 			select {
-			case <-done:
-				ticker.Stop()
-				return
 			case <-ticker.C:
-				// FIXME: this one just gets a copy of store so the original store
-				//  is unaffected by Compact
-				_ = store.Compact()
+				_ = store.compact()
+			case act := <-actionChannel:
+				switch act.Type {
+				case compactAction:
+					err := store.compact()
+					act.respChan <- ActionResult{err: err}
+				case clearAction:
+					err = store.clear()
+					act.respChan <- ActionResult{err: err}
+				case deleteAction:
+					err = store.delete(act.key)
+					act.respChan <- ActionResult{err: err}
+				case getAction:
+					v, err := store.get(act.key)
+					act.respChan <- ActionResult{err: err, value: v}
+				case setAction:
+					err = store.set(act.key, act.value, act.ttl)
+					act.respChan <- ActionResult{err: err}
+				case getStoreInstance:
+					act.respChan <- ActionResult{store: store}
+				case closeAction:
+					ticker.Stop()
+					err = store.close()
+					act.respChan <- ActionResult{err: err}
+					return
+				}
 			}
 		}
-	}(store.bgCtrl)
+	}(actionCh)
 
-	return store, nil
+	return &Store{
+		ch: actionCh,
+	}, nil
 }
 
 // Set sets the given key value in the store
 // This is used to insert or update any key-value pair in the store
-func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
-	// to handle concurrency
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *innerStore) set(k []byte, v []byte, ttl *uint64) error {
 	expiry := uint64(0)
 	if ttl != nil {
 		expiry = uint64(time.Now().Unix()) + *ttl
@@ -123,10 +170,7 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 }
 
 // Get returns the value corresponding to the given key
-func (s *Store) Get(k []byte) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *innerStore) get(k []byte) ([]byte, error) {
 	initialIdxOffset := s.header.GetIndexOffset(k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
@@ -163,10 +207,7 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 }
 
 // Delete removes the key-value for the given key
-func (s *Store) Delete(k []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *innerStore) delete(k []byte) error {
 	initialIdxOffset := s.header.GetIndexOffset(k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
@@ -201,10 +242,7 @@ func (s *Store) Delete(k []byte) error {
 }
 
 // Clear removes all data in the store
-func (s *Store) Clear() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *innerStore) clear() error {
 	return s.bufferPool.ClearFile()
 }
 
@@ -223,26 +261,132 @@ func (s *Store) Clear() error {
 // may wish to do it manually for some reason.
 //
 // This is a very expensive operation so use it sparingly.
-func (s *Store) Compact() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *innerStore) compact() error {
 	return s.bufferPool.CompactFile()
 }
 
 // Close frees up any resources occupied by store.
 // After this, the store is unusable. You have to re-instantiate it or just run into
 // some crazy errors
-func (s *Store) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *innerStore) close() error {
 	err := s.bufferPool.Close()
 	if err != nil {
 		return err
 	}
 
-	s.bgCtrl <- true
 	s.header = nil
 	return nil
+}
+
+///
+
+// Set sets the given key value in the store
+// This is used to insert or update any key-value pair in the store
+func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
+	respCh := make(chan ActionResult)
+	s.ch <- Action{
+		Type:     setAction,
+		key:      k,
+		value:    v,
+		ttl:      ttl,
+		respChan: respCh,
+	}
+	resp := <-respCh
+	return resp.err
+}
+
+// Get returns the value corresponding to the given key
+func (s *Store) Get(k []byte) ([]byte, error) {
+	respCh := make(chan ActionResult)
+	s.ch <- Action{
+		Type:     getAction,
+		key:      k,
+		respChan: respCh,
+	}
+	resp := <-respCh
+	return resp.value, resp.err
+}
+
+// Delete removes the key-value for the given key
+func (s *Store) Delete(k []byte) error {
+	respCh := make(chan ActionResult)
+	s.ch <- Action{
+		Type:     deleteAction,
+		key:      k,
+		respChan: respCh,
+	}
+	resp := <-respCh
+	return resp.err
+}
+
+// Clear removes all data in the store
+func (s *Store) Clear() error {
+	respCh := make(chan ActionResult)
+	s.ch <- Action{
+		Type:     clearAction,
+		respChan: respCh,
+	}
+	resp := <-respCh
+	return resp.err
+}
+
+// Compact manually removes dangling key-value pairs in the database file
+//
+// Dangling keys result from either getting expired or being deleted.
+// When a Store.Delete operation is done, the actual key-value pair
+// is just marked as `deleted` but is not removed.
+//
+// Something similar happens when a key-value is updated.
+// A new key-value pair is created and the old one is left un-indexed.
+// Compaction is important because it reclaims this space and reduces the size
+// of the database file.
+//
+// This is done automatically for you at the set `compactionInterval` but you
+// may wish to do it manually for some reason.
+//
+// This is a very expensive operation so use it sparingly.
+func (s *Store) Compact() error {
+	respCh := make(chan ActionResult)
+	s.ch <- Action{
+		Type:     compactAction,
+		respChan: respCh,
+	}
+	resp := <-respCh
+	return resp.err
+}
+
+// Close frees up any resources occupied by store.
+// After this, the store is unusable. You have to re-instantiate it or just run into
+// some crazy errors
+func (s *Store) Close() error {
+	if s.isClosed {
+		return nil
+	}
+
+	respCh := make(chan ActionResult)
+	s.ch <- Action{
+		Type:     closeAction,
+		respChan: respCh,
+	}
+	resp := <-respCh
+	if resp.err != nil {
+		return resp.err
+	}
+
+	close(s.ch)
+	s.isClosed = true
+
+	return nil
+}
+
+// getInnerStore returns the instance of the inner store
+// to take a peek into it especially for tests
+func (s *Store) getInnerStore() *innerStore {
+	respCh := make(chan ActionResult)
+	s.ch <- Action{
+		Type:     getStoreInstance,
+		respChan: respCh,
+	}
+	resp := <-respCh
+	return resp.store
 }

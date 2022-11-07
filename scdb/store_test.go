@@ -260,7 +260,7 @@ func TestStore_Compact(t *testing.T) {
 
 		initialFileSize := getFileSize(t, dbPath)
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(3 * time.Second)
 		err := store.Compact()
 		if err != nil {
 			t.Fatalf("error compacting store: %s", err)
@@ -268,10 +268,7 @@ func TestStore_Compact(t *testing.T) {
 
 		finalFileSize := getFileSize(t, dbPath)
 
-		if finalFileSize >= initialFileSize {
-			t.Errorf("final file size %v should be less than initial file size %v", finalFileSize, initialFileSize)
-		}
-
+		assert.Less(t, finalFileSize, initialFileSize)
 		nonExistentKeys := extractKeysFromRecords(RECORDS[2:])
 		assertStoreContains(t, store, RECORDS[:2])
 		assertKeysDontExist(t, store, nonExistentKeys)
@@ -294,11 +291,11 @@ func TestStore_Compact(t *testing.T) {
 
 		initialFileSize := getFileSize(t, dbPath)
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(3 * time.Second)
 
 		finalFileSize := getFileSize(t, dbPath)
 
-		assert.Greater(t, initialFileSize, finalFileSize)
+		assert.Less(t, finalFileSize, initialFileSize)
 		nonExistentKeys := extractKeysFromRecords(RECORDS[2:])
 		assertStoreContains(t, store, RECORDS[:2])
 		assertKeysDontExist(t, store, nonExistentKeys)
@@ -323,6 +320,8 @@ func TestStore_Close(t *testing.T) {
 	insertRecords(t, store, RECORDS[3:], &ttl)
 	deleteRecords(t, store, [][]byte{RECORDS[2].k})
 
+	innerSt := store.getInnerStore()
+
 	err := store.Close()
 	if err != nil {
 		t.Fatalf("error closing store: %s", err)
@@ -336,9 +335,10 @@ func TestStore_Close(t *testing.T) {
 
 	// no compaction done because background tasks have been stopped
 	assert.Equal(t, initialFileSize, finalFileSize)
-	assert.Nil(t, store.header)
+
+	assert.Nil(t, innerSt.header)
 	// already closed buffer pool will throw error
-	assert.Error(t, store.bufferPool.Close())
+	assert.Error(t, innerSt.bufferPool.Close())
 }
 
 // removeStore is a utility to remove the old store just before a given test is run
