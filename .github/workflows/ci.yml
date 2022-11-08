@@ -12,9 +12,8 @@ jobs:
   test:
     strategy:
       matrix:
-        os: ["windows-latest", "ubuntu-latest", "macOS-latest"]
         go: [ "1.18", "1.19" ]
-    runs-on: ${{ matrix.go }}
+    runs-on: "ubuntu-latest"
     steps:
       - uses: actions/checkout@v3
       - name: Set up Golang ${{ matrix.go }}
