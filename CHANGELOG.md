@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.6] - 2022-11-9
+
+### Added
+
+### Changed
+
+- Optimized the Compact operation. 
+  - Removed unnecessary internal type conversions e.g. to `internal.entries.Index`.
+  - Got rid of message passing in iterating over the index blocks
+
+### Fixed
+
 ## [0.0.5] - 2022-11-9
 
 ### Added
