@@ -381,12 +381,12 @@ func BenchmarkStore_Compact(b *testing.B) {
 
 	ttl := uint64(1)
 
-	b.Run("Compact", func(b *testing.B) {
-		insertRecordsForBenchmarks(b, store, RECORDS[:3], nil)
-		insertRecordsForBenchmarks(b, store, RECORDS[3:], &ttl)
-		deleteRecordsForBenchmarks(b, store, [][]byte{RECORDS[3].k})
-		time.Sleep(2 * time.Second)
+	insertRecordsForBenchmarks(b, store, RECORDS[:3], nil)
+	insertRecordsForBenchmarks(b, store, RECORDS[3:], &ttl)
+	deleteRecordsForBenchmarks(b, store, [][]byte{RECORDS[3].k})
+	time.Sleep(2 * time.Second)
 
+	b.Run("Compact", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			_ = store.Compact()
 		}

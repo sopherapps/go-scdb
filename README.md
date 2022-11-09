@@ -220,9 +220,9 @@ On a average PC
 
 ``` 
 cpu: Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-BenchmarkStore_Clear/Clear-8               47697             26092 ns/op
-BenchmarkStore_Clear/Clear_with_ttl:_3600-8                44049             26306 ns/op
-BenchmarkStore_Compact/Compact-8                               1        2049405162 ns/op
+BenchmarkStore_Clear/Clear-8                              47697             26092 ns/op
+BenchmarkStore_Clear/Clear_with_ttl:_3600-8               44049             26306 ns/op
+BenchmarkStore_Compact/Compact-8         	              50	              23524929 ns/op
 BenchmarkStore_DeleteWithoutTtl/Delete_key_hey-8          507656              2210 ns/op
 BenchmarkStore_DeleteWithoutTtl/Delete_key_hi-8           510031              4315 ns/op
 BenchmarkStore_DeleteWithoutTtl/Delete_key_salut-8        261019              4299 ns/op
