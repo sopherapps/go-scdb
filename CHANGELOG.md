@@ -7,15 +7,25 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.7] - 2022-11-9
+
+### Added
+
+- More thorough documentation for the Store
+
+### Changed
+
+### Fixed
+
 ## [0.0.6] - 2022-11-9
 
 ### Added
 
 ### Changed
 
-- Optimized the Compact operation. 
-  - Removed unnecessary internal type conversions e.g. to `internal.entries.Index`.
-  - Got rid of message passing in iterating over the index blocks
+- Optimized the Compact operation.
+    - Removed unnecessary internal type conversions e.g. to `internal.entries.Index`.
+    - Got rid of message passing in iterating over the index blocks
 
 ### Fixed
 

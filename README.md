@@ -6,7 +6,7 @@ A very simple and fast key-value pure-go store but persisting data to disk, with
 
 This is the pure-golang version of the original [scdb](https://github.com/sopherapps/scdb)
 
-**scdb may not be production-ready yet. It works, quite well but it requires more vigorous testing.**
+**scdb may not be production-ready yet. It works, quite well but it requires more rigorous testing.**
 
 ## Purpose
 

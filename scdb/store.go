@@ -12,13 +12,16 @@ import (
 	"time"
 )
 
-// DefaultDbFile is the default name of the database file that contains all the key-value pairs
-const DefaultDbFile string = "dump.scdb"
+// defaultDbFile is the default name of the database file that contains all the key-value pairs
+const defaultDbFile string = "dump.scdb"
 
-var ZeroU64 = internal.Uint64ToByteArray(0)
+var zeroU64 = internal.Uint64ToByteArray(0)
 
-// Store is the public interface to the key-value store
-// that allows us to do operations like Set, Get, Delete, Clear and Compact
+// Store is a key-value store that persists key-value pairs to disk
+//
+// Store behaves like a HashMap that saves keys and value as byte arrays
+// on disk. It allows for specifying how long each key-value pair should be
+// kept for i.e. the time-to-live in seconds. If None is provided, they last indefinitely.
 type Store struct {
 	bufferPool *buffers.BufferPool
 	header     *entries.DbFileHeader
@@ -27,14 +30,48 @@ type Store struct {
 	isClosed   bool
 }
 
-// New creates a new Store at the given path, with the given `compactionInterval`
+// New creates a new Store at the given path
+// The Store has a number of configurations that are passed into this New function
+//
+//   - `storePath` - required:
+//     The path to a directory where scdb should store its data
+//
+//   - `maxKeys` - default: 1 million:
+//     The maximum number of key-value pairs to store in store
+//
+//   - `redundantBlocks` - default: 1:
+//     The store has an index to hold all the keys. This index is split
+//     into a fixed number of blocks basing on the virtual memory page size
+//     and the total number of keys to be held i.e. `max_keys`.
+//     Sometimes, there may be hash collision errors as the store's
+//     current stored keys approach `max_keys`. The closer it gets, the
+//     more it becomes likely see those errors. Adding redundant blocks
+//     helps mitigate this. Just be careful to not add too many (i.e. more than 2)
+//     since the higher the number of these blocks, the slower the store becomes.
+//
+//   - `poolCapacity` - default: 5:
+//     The number of buffers to hold in memory as cache's for the store. Each buffer
+//     has the size equal to the virtual memory's page size, usually 4096 bytes.
+//     Increasing this number will speed this store up but of course, the machine
+//     has a limited RAM. When this number increases to a value that clogs the RAM, performance
+//     suddenly degrades, and keeps getting worse from there on.
+//
+//   - `compactionInterval` - default 3600s (1 hour):
+//     The interval at which the store is compacted to remove dangling
+//     keys. Dangling keys result from either getting expired or being deleted.
+//     When a `delete` operation is done, the actual key-value pair
+//     is just marked as `deleted` but is not removed.
+//     Something similar happens when a key-value is updated.
+//     A new key-value pair is created and the old one is left unindexed.
+//     Compaction is important because it reclaims this space and reduces the size
+//     of the database file.
 func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *uint64, compactionInterval *uint32) (*Store, error) {
 	err := os.MkdirAll(path, 0755)
 	if err != nil {
 		return nil, err
 	}
 
-	dbFilePath := filepath.Join(path, DefaultDbFile)
+	dbFilePath := filepath.Join(path, defaultDbFile)
 	bufferPool, err := buffers.NewBufferPool(poolCapacity, dbFilePath, maxKeys, redundantBlocks, nil)
 	if err != nil {
 		return nil, err
@@ -133,7 +170,7 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 			return nil, err
 		}
 
-		if bytes.Equal(kvOffsetInBytes, ZeroU64) {
+		if bytes.Equal(kvOffsetInBytes, zeroU64) {
 			continue
 		}
 
@@ -173,7 +210,7 @@ func (s *Store) Delete(k []byte) error {
 			return err
 		}
 
-		if bytes.Equal(kvOffsetInBytes, ZeroU64) {
+		if bytes.Equal(kvOffsetInBytes, zeroU64) {
 			continue
 		}
 

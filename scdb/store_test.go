@@ -3,6 +3,7 @@ package scdb
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"log"
 	"os"
 	"path"
 	"runtime"
@@ -519,6 +520,84 @@ func BenchmarkStore_SetWithTtl(b *testing.B) {
 		})
 	}
 
+}
+
+func ExampleNew() {
+	var maxKeys uint64 = 1_000_000
+	var redundantBlocks uint16 = 1
+	var poolCapacity uint64 = 10
+	var compactionInterval uint32 = 1_800
+
+	store, err := New(
+		"testdb",
+		&maxKeys,
+		&redundantBlocks,
+		&poolCapacity,
+		&compactionInterval)
+	if err != nil {
+		log.Fatalf("error opening store: %s", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+}
+
+func ExampleStore_Set() {
+	store, err := New("testdb", nil, nil, nil, nil)
+	if err != nil {
+		log.Fatalf("error opening store: %s", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	err = store.Set([]byte("foo"), []byte("bar"), nil)
+	if err != nil {
+		log.Fatalf("error setting key value without ttl: %s", err)
+	}
+
+	ttl := uint64(3_600)
+	err = store.Set([]byte("fake"), []byte("bear"), &ttl)
+	if err != nil {
+		log.Fatalf("error setting key value with ttl: %s", err)
+	}
+}
+
+func ExampleStore_Get() {
+	store, err := New("testdb", nil, nil, nil, nil)
+	if err != nil {
+		log.Fatalf("error opening store: %s", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	err = store.Set([]byte("foo"), []byte("bar"), nil)
+	if err != nil {
+		log.Fatalf("error setting key value: %s", err)
+	}
+
+	value, err := store.Get([]byte("foo"))
+	if err != nil {
+		log.Fatalf("error getting key: %s", err)
+	}
+
+	fmt.Printf("%s", value)
+	// Output: bar
+}
+func ExampleStore_Delete() {
+	store, err := New("testdb", nil, nil, nil, nil)
+	if err != nil {
+		log.Fatalf("error opening store: %s", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	err = store.Delete([]byte("foo"))
+	if err != nil {
+		log.Fatalf("error deleting key: %s", err)
+	}
 }
 
 // removeStore is a utility to remove the old store just before a given test is run
