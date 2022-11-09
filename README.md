@@ -269,10 +269,6 @@ PASS
 ok      github.com/sopherapps/go-scdb/scdb      60.630s
 ```
 
-## TODO
-
-- [ ] Optimize the `Compact` operation
-
 ## Acknowledgements
 
 - The GopherAcademy Article
