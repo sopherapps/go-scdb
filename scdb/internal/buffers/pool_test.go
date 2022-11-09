@@ -415,14 +415,16 @@ func TestBufferPool_ClearFile(t *testing.T) {
 	}
 
 	// the index should all be reset to zero
-	index := entries.NewIndex(pool.File, header)
-	zeroStr := string(make([]byte, index.BlockSize))
-	for blockResult := range index.Blocks() {
-		if blockResult.Err != nil {
-			t.Fatalf("error reading index: %s", blockResult.Err)
+	blockSize := int64(header.NetBlockSize)
+	numOfBlocks := int64(header.NumberOfIndexBlocks)
+	zeroStr := string(make([]byte, blockSize))
+	for i := int64(0); i < numOfBlocks; i++ {
+		indexBlock, err := pool.readIndexBlock(i, blockSize)
+		if err != nil {
+			t.Fatalf("error reading index: %s", err)
 		}
 
-		assert.Equal(t, string(blockResult.Data), zeroStr)
+		assert.Equal(t, string(indexBlock), zeroStr)
 	}
 
 	// the metadata of the pool should be reset

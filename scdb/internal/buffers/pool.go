@@ -205,7 +205,6 @@ func (bp *BufferPool) CompactFile() error {
 		return err
 	}
 
-	index := entries.NewIndex(bp.File, header)
 	idxEntrySize := entries.IndexEntrySizeInBytes
 	idxEntrySizeAsInt64 := int64(idxEntrySize)
 	zero := make([]byte, idxEntrySize)
@@ -213,21 +212,25 @@ func (bp *BufferPool) CompactFile() error {
 	idxOffset := int64(entries.HeaderSizeInBytes)
 	newFileOffset := int64(header.KeyValuesStartPoint)
 
-	for result := range index.Blocks() {
-		if result.Err != nil && !errors.Is(result.Err, io.EOF) {
-			return result.Err
+	numOfBlocks := int64(header.NumberOfIndexBlocks)
+	blockSize := int64(header.NetBlockSize)
+
+	for i := int64(0); i < numOfBlocks; i++ {
+		indexBlock, err := bp.readIndexBlock(i, blockSize)
+		if err != nil {
+			return err
 		}
 
 		// write index block into new file
-		_, err = newFile.WriteAt(result.Data, idxOffset)
+		_, err = newFile.WriteAt(indexBlock, idxOffset)
 		if err != nil && !errors.Is(err, io.EOF) {
 			return err
 		}
 
-		idxBlockLength := uint64(len(result.Data))
+		idxBlockLength := uint64(len(indexBlock))
 		for lwr := uint64(0); lwr < idxBlockLength; lwr += idxEntrySize {
 			upr := lwr + idxEntrySize
-			idxBytes := result.Data[lwr:upr]
+			idxBytes := indexBlock[lwr:upr]
 
 			if string(idxBytes) != zeroStr {
 				kvByteArray, e := getKvByteArray(bp.File, idxBytes)
@@ -456,6 +459,19 @@ func (bp *BufferPool) ReadIndex(addr uint64) ([]byte, error) {
 
 	start := addr - blockLeftOffset
 	return data[start : start+entries.IndexEntrySizeInBytes], nil
+}
+
+// readIndexBlock returns the next index block
+func (bp *BufferPool) readIndexBlock(blockNum int64, blockSize int64) ([]byte, error) {
+	buf := make([]byte, blockSize)
+	offset := int64(entries.HeaderSizeInBytes) + (blockNum * blockSize)
+
+	bytesRead, err := bp.File.ReadAt(buf, offset)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+
+	return buf[:bytesRead], nil
 }
 
 // getBlockLeftOffset returns the left offset for the block in which the address is to be found
