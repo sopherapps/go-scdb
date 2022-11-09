@@ -320,8 +320,6 @@ func TestStore_Close(t *testing.T) {
 	insertRecords(t, store, RECORDS[3:], &ttl)
 	deleteRecords(t, store, [][]byte{RECORDS[2].k})
 
-	innerStore := store.store
-
 	err := store.Close()
 	if err != nil {
 		t.Fatalf("error closing store: %s", err)
@@ -336,10 +334,10 @@ func TestStore_Close(t *testing.T) {
 	// no compaction done because background tasks have been stopped
 	assert.Equal(t, initialFileSize, finalFileSize)
 
-	assert.Nil(t, innerStore.Header)
+	assert.Nil(t, store.header)
 	assert.True(t, store.isClosed)
 	// already closed buffer pool will throw error
-	assert.Error(t, innerStore.BufferPool.Close())
+	assert.Error(t, store.bufferPool.Close())
 }
 
 func BenchmarkStore_Clear(b *testing.B) {

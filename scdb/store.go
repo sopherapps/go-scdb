@@ -1,4 +1,4 @@
-package store
+package scdb
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"github.com/sopherapps/go-scdb/scdb/internal/entries"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -16,18 +17,18 @@ const DefaultDbFile string = "dump.scdb"
 
 var ZeroU64 = internal.Uint64ToByteArray(0)
 
-// Store is the actual store of the key-value pairs
-// It contains the BufferPool which in turn interfaces with both the memory
-// and the disk to keep, retrieve and delete key-value pairs
+// Store is the public interface to the key-value store
+// that allows us to do operations like Set, Get, Delete, Clear and Compact
 type Store struct {
-	BufferPool         *buffers.BufferPool
-	Header             *entries.DbFileHeader
-	CompactionInterval time.Duration
-	C                  chan Op
+	bufferPool *buffers.BufferPool
+	header     *entries.DbFileHeader
+	closeCh    chan bool
+	mu         sync.Mutex
+	isClosed   bool
 }
 
-// NewStore creates a new Store at the given path, with the given `compactionInterval`
-func NewStore(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *uint64, compactionInterval *uint32) (*Store, error) {
+// New creates a new Store at the given path, with the given `compactionInterval`
+func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *uint64, compactionInterval *uint32) (*Store, error) {
 	err := os.MkdirAll(path, 0755)
 	if err != nil {
 		return nil, err
@@ -49,31 +50,37 @@ func NewStore(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacit
 		interval = time.Duration(*compactionInterval) * time.Second
 	}
 
-	return &Store{
-		BufferPool:         bufferPool,
-		Header:             header,
-		CompactionInterval: interval,
-		C:                  make(chan Op),
-	}, nil
+	store := &Store{
+		bufferPool: bufferPool,
+		header:     header,
+		closeCh:    make(chan bool),
+	}
+
+	go store.startBackgroundCompaction(interval)
+
+	return store, nil
 }
 
 // Set sets the given key value in the store
 // This is used to insert or update any key-value pair in the store
 func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	expiry := uint64(0)
 	if ttl != nil {
 		expiry = uint64(time.Now().Unix()) + *ttl
 	}
 
-	initialIdxOffset := s.Header.GetIndexOffset(k)
+	initialIdxOffset := s.header.GetIndexOffset(k)
 
-	for idxBlock := uint64(0); idxBlock < s.Header.NumberOfIndexBlocks; idxBlock++ {
-		indexOffset, err := s.Header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
+	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
+		indexOffset, err := s.header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
 		if err != nil {
 			return err
 		}
 
-		kvOffsetInBytes, err := s.BufferPool.ReadIndex(indexOffset)
+		kvOffsetInBytes, err := s.bufferPool.ReadIndex(indexOffset)
 		if err != nil {
 			return err
 		}
@@ -88,7 +95,7 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 
 		// the offset could also be for this key if the key in file matches the key supplied - thus update
 		if !isOffsetForKey {
-			isOffsetForKey, err = s.BufferPool.AddrBelongsToKey(kvOffset, k)
+			isOffsetForKey, err = s.bufferPool.AddrBelongsToKey(kvOffset, k)
 			if err != nil {
 				return err
 			}
@@ -96,11 +103,11 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 
 		if isOffsetForKey {
 			kv := entries.NewKeyValueEntry(k, v, expiry)
-			prevLastOffset, err := s.BufferPool.Append(kv.AsBytes())
+			prevLastOffset, err := s.bufferPool.Append(kv.AsBytes())
 			if err != nil {
 				return err
 			}
-			return s.BufferPool.UpdateIndex(indexOffset, internal.Uint64ToByteArray(prevLastOffset))
+			return s.bufferPool.UpdateIndex(indexOffset, internal.Uint64ToByteArray(prevLastOffset))
 		}
 
 	}
@@ -110,15 +117,18 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 
 // Get returns the value corresponding to the given key
 func (s *Store) Get(k []byte) ([]byte, error) {
-	initialIdxOffset := s.Header.GetIndexOffset(k)
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	for idxBlock := uint64(0); idxBlock < s.Header.NumberOfIndexBlocks; idxBlock++ {
-		indexOffset, err := s.Header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
+	initialIdxOffset := s.header.GetIndexOffset(k)
+
+	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
+		indexOffset, err := s.header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
 		if err != nil {
 			return nil, err
 		}
 
-		kvOffsetInBytes, err := s.BufferPool.ReadIndex(indexOffset)
+		kvOffsetInBytes, err := s.bufferPool.ReadIndex(indexOffset)
 		if err != nil {
 			return nil, err
 		}
@@ -132,7 +142,7 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 			return nil, err
 		}
 
-		value, err := s.BufferPool.GetValue(kvOffset, k)
+		value, err := s.bufferPool.GetValue(kvOffset, k)
 		if err != nil {
 			return nil, err
 		}
@@ -147,15 +157,18 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 
 // Delete removes the key-value for the given key
 func (s *Store) Delete(k []byte) error {
-	initialIdxOffset := s.Header.GetIndexOffset(k)
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	for idxBlock := uint64(0); idxBlock < s.Header.NumberOfIndexBlocks; idxBlock++ {
-		indexOffset, err := s.Header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
+	initialIdxOffset := s.header.GetIndexOffset(k)
+
+	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
+		indexOffset, err := s.header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
 		if err != nil {
 			return err
 		}
 
-		kvOffsetInBytes, err := s.BufferPool.ReadIndex(indexOffset)
+		kvOffsetInBytes, err := s.bufferPool.ReadIndex(indexOffset)
 		if err != nil {
 			return err
 		}
@@ -169,7 +182,7 @@ func (s *Store) Delete(k []byte) error {
 			return err
 		}
 
-		isOffsetForKey, err := s.BufferPool.TryDeleteKvEntry(kvOffset, k)
+		isOffsetForKey, err := s.bufferPool.TryDeleteKvEntry(kvOffset, k)
 		if err != nil {
 			return err
 		}
@@ -185,7 +198,10 @@ func (s *Store) Delete(k []byte) error {
 
 // Clear removes all data in the store
 func (s *Store) Clear() error {
-	return s.BufferPool.ClearFile()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.bufferPool.ClearFile()
 }
 
 // Compact manually removes dangling key-value pairs in the database file
@@ -204,54 +220,47 @@ func (s *Store) Clear() error {
 //
 // This is a very expensive operation so use it sparingly.
 func (s *Store) Compact() error {
-	return s.BufferPool.CompactFile()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.bufferPool.CompactFile()
 }
 
 // Close frees up any resources occupied by store.
 // After this, the store is unusable. You have to re-instantiate it or just run into
 // some crazy errors
 func (s *Store) Close() error {
-	err := s.BufferPool.Close()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.isClosed {
+		return nil
+	}
+
+	s.closeCh <- true
+	close(s.closeCh)
+	s.isClosed = true
+
+	err := s.bufferPool.Close()
 	if err != nil {
 		return err
 	}
 
-	s.Header = nil
+	s.header = nil
+
 	return nil
 }
 
-// Open opens the Store and starts receiving an Op's as sent on
-// the Store.C channel.
-// It also starts the background compaction task that runs every Store.CompactionInterval Duration
-func (s *Store) Open() {
-	ticker := time.NewTicker(s.CompactionInterval)
+// startBackgroundCompaction starts the background compaction task that runs every `interval`
+func (s *Store) startBackgroundCompaction(interval time.Duration) {
+	ticker := time.NewTicker(interval)
 	for {
 		select {
 		case <-ticker.C:
 			_ = s.Compact()
-		case op := <-s.C:
-			switch op.Type {
-			case CompactOp:
-				err := s.Compact()
-				op.RespChan <- OpResult{Err: err}
-			case ClearOp:
-				err := s.Clear()
-				op.RespChan <- OpResult{Err: err}
-			case DeleteOp:
-				err := s.Delete(op.Key)
-				op.RespChan <- OpResult{Err: err}
-			case GetOp:
-				v, err := s.Get(op.Key)
-				op.RespChan <- OpResult{Err: err, Value: v}
-			case SetOp:
-				err := s.Set(op.Key, op.Value, op.Ttl)
-				op.RespChan <- OpResult{Err: err}
-			case CloseOp:
-				ticker.Stop()
-				err := s.Close()
-				op.RespChan <- OpResult{Err: err}
-				return
-			}
+		case <-s.closeCh:
+			ticker.Stop()
+			return
 		}
 	}
 }
