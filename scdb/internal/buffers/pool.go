@@ -387,7 +387,7 @@ func (bp *BufferPool) AddrBelongsToKey(kvAddress uint64, key []byte) (bool, erro
 	}
 
 	// loop in reverse, starting at the back
-	// since the latest kv_buffers are the ones updated when new changes occur
+	// since the latest kvBuffers are the ones updated when new changes occur
 	kvBufLen := len(bp.kvBuffers)
 	for i := kvBufLen - 1; i >= 0; i-- {
 		buf := bp.kvBuffers[i]

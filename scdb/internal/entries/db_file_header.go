@@ -129,7 +129,7 @@ func (h *DbFileHeader) GetIndexOffset(key []byte) uint64 {
 	return HeaderSizeInBytes + (hash * IndexEntrySizeInBytes)
 }
 
-// GetIndexOffsetInNthBlock returns the index offset for the nth index block if `initial_offset` is the offset
+// GetIndexOffsetInNthBlock returns the index offset for the nth index block if `initialOffset` is the offset
 // in the top most index block `n` starts at zero where zero is the top most index block
 func (h *DbFileHeader) GetIndexOffsetInNthBlock(initialOffset uint64, n uint64) (uint64, error) {
 	if n >= h.NumberOfIndexBlocks {

@@ -19,7 +19,7 @@ type Buffer struct {
 	RightOffset uint64
 }
 
-// NewBuffer creates a new Buffer with the given left_offset
+// NewBuffer creates a new Buffer with the given leftOffset
 // FIXME: Add test for this
 func NewBuffer(leftOffset uint64, data []byte, capacity uint64) *Buffer {
 	upperBound := uint64(math.Min(float64(len(data)), float64(capacity)))
@@ -50,7 +50,7 @@ func (b *Buffer) Contains(addr uint64) bool {
 //
 // It is possible for data appended to this buffer to make it exceed
 // its capacity. However, after that Buffer.CanAppend will always return false
-// So make sure you call `can_append()` always.
+// So make sure you call `canAppend()` always.
 // This is a trade-off that allows us to limit the number of re-allocations for buffers
 func (b *Buffer) Append(data []byte) uint64 {
 	dataLength := len(data)
