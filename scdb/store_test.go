@@ -2,6 +2,7 @@ package scdb
 
 import (
 	"fmt"
+	"github.com/sopherapps/go-scdb/scdb/internal/buffers"
 	"github.com/stretchr/testify/assert"
 	"log"
 	"os"
@@ -24,6 +25,30 @@ var RECORDS = []testRecord{
 	{[]byte("hola"), []byte("Spanish")},
 	{[]byte("oi"), []byte("Portuguese")},
 	{[]byte("mulimuta"), []byte("Runyoro")},
+}
+
+var SEARCH_RECORDS = []testRecord{
+	{[]byte("foo"), []byte("eng")},
+	{[]byte("fore"), []byte("span")},
+	{[]byte("food"), []byte("lug")},
+	{[]byte("bar"), []byte("port")},
+	{[]byte("band"), []byte("nyoro")},
+	{[]byte("pig"), []byte("dan")},
+}
+
+var SEARCH_TERMS = [][]byte{
+	[]byte("f"),
+	[]byte("fo"),
+	[]byte("foo"),
+	[]byte("for"),
+	[]byte("b"),
+	[]byte("ba"),
+	[]byte("bar"),
+	[]byte("ban"),
+	[]byte("pigg"),
+	[]byte("p"),
+	[]byte("pi"),
+	[]byte("pig"),
 }
 
 func TestStore_Get(t *testing.T) {
@@ -49,6 +74,167 @@ func TestStore_Get(t *testing.T) {
 		nonExistentKeys := [][]byte{[]byte("blue"), []byte("green"), []byte("red")}
 		assertKeysDontExist(t, store, nonExistentKeys)
 	})
+}
+
+func TestStore_Search(t *testing.T) {
+	dbPath := "testdb_search"
+	removeStore(t, dbPath)
+	store := createStore(t, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+		removeStore(t, dbPath)
+	}()
+
+	type testParams struct {
+		term     []byte
+		skip     uint64
+		limit    uint64
+		expected []buffers.KeyValuePair
+	}
+
+	t.Run("SearchWithoutPaginationReturnsAllMatchedKeyValues", func(t *testing.T) {
+		table := []testParams{
+			{[]byte("f"), 0, 0, []buffers.KeyValuePair{{[]byte("foo"), []byte("eng")}, {[]byte("fore"), []byte("span")}, {[]byte("food"), []byte("lug")}}},
+			{[]byte("fo"), 0, 0, []buffers.KeyValuePair{{[]byte("foo"), []byte("eng")}, {[]byte("fore"), []byte("span")}, {[]byte("food"), []byte("lug")}}},
+			{[]byte("foo"), 0, 0, []buffers.KeyValuePair{{[]byte("foo"), []byte("eng")}, {[]byte("food"), []byte("lug")}}},
+			{[]byte("food"), 0, 0, []buffers.KeyValuePair{{[]byte("food"), []byte("lug")}}},
+			{[]byte("for"), 0, 0, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}}},
+			{[]byte("b"), 0, 0, []buffers.KeyValuePair{{[]byte("bar"), []byte("port")}, {[]byte("band"), []byte("nyoro")}}},
+			{[]byte("ba"), 0, 0, []buffers.KeyValuePair{{[]byte("bar"), []byte("port")}, {[]byte("band"), []byte("nyoro")}}},
+			{[]byte("bar"), 0, 0, []buffers.KeyValuePair{{[]byte("bar"), []byte("port")}}},
+			{[]byte("ban"), 0, 0, []buffers.KeyValuePair{{[]byte("band"), []byte("nyoro")}}},
+			{[]byte("band"), 0, 0, []buffers.KeyValuePair{{[]byte("band"), []byte("nyoro")}}},
+			{[]byte("p"), 0, 0, []buffers.KeyValuePair{{[]byte("pig"), []byte("dan")}}},
+			{[]byte("pi"), 0, 0, []buffers.KeyValuePair{{[]byte("pig"), []byte("dan")}}},
+			{[]byte("pig"), 0, 0, []buffers.KeyValuePair{{[]byte("pig"), []byte("dan")}}},
+			{[]byte("pigg"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("bandana"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("bare"), 0, 0, []buffers.KeyValuePair{}},
+		}
+
+		insertRecords(t, store, SEARCH_RECORDS, nil)
+		for _, rec := range table {
+			got, err := store.Search(rec.term, rec.skip, rec.limit)
+			if err != nil {
+				t.Fatalf("error searching: %s", err)
+			}
+
+			assert.Equal(t, rec.expected, got)
+		}
+	})
+
+	t.Run("SearchWithPaginationSkipsSomeAndReturnsNotMoreThanLimit", func(t *testing.T) {
+		table := []testParams{
+			{[]byte("fo"), 0, 0, []buffers.KeyValuePair{{[]byte("foo"), []byte("eng")}, {[]byte("fore"), []byte("span")}, {[]byte("food"), []byte("lug")}}},
+			{[]byte("fo"), 0, 8, []buffers.KeyValuePair{{[]byte("foo"), []byte("eng")}, {[]byte("fore"), []byte("span")}, {[]byte("food"), []byte("lug")}}},
+			{[]byte("fo"), 1, 8, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}, {[]byte("food"), []byte("lug")}}},
+			{[]byte("fo"), 1, 0, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}, {[]byte("food"), []byte("lug")}}},
+			{[]byte("fo"), 0, 2, []buffers.KeyValuePair{{[]byte("foo"), []byte("eng")}, {[]byte("fore"), []byte("span")}}},
+			{[]byte("fo"), 1, 2, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}, {[]byte("food"), []byte("lug")}}},
+			{[]byte("fo"), 0, 1, []buffers.KeyValuePair{{[]byte("foo"), []byte("eng")}}},
+			{[]byte("fo"), 2, 1, []buffers.KeyValuePair{{[]byte("food"), []byte("lug")}}},
+			{[]byte("fo"), 1, 1, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}}},
+		}
+
+		insertRecords(t, store, SEARCH_RECORDS, nil)
+		for _, rec := range table {
+			got, err := store.Search(rec.term, rec.skip, rec.limit)
+			if err != nil {
+				t.Fatalf("error searching: %s", err)
+			}
+
+			assert.Equal(t, rec.expected, got)
+		}
+	})
+
+	t.Run("SearchAfterExpirationReturnsNoExpiredKeysValues", func(t *testing.T) {
+		table := []testParams{
+			{[]byte("f"), 0, 0, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}}},
+			{[]byte("fo"), 0, 0, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}}},
+			{[]byte("foo"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("for"), 0, 0, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}}},
+			{[]byte("b"), 0, 0, []buffers.KeyValuePair{{[]byte("band"), []byte("nyoro")}}},
+			{[]byte("ba"), 0, 0, []buffers.KeyValuePair{{[]byte("band"), []byte("nyoro")}}},
+			{[]byte("bar"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("ban"), 0, 0, []buffers.KeyValuePair{{[]byte("band"), []byte("nyoro")}}},
+			{[]byte("band"), 0, 0, []buffers.KeyValuePair{{[]byte("band"), []byte("nyoro")}}},
+			{[]byte("p"), 0, 0, []buffers.KeyValuePair{{[]byte("pig"), []byte("dan")}}},
+			{[]byte("pi"), 0, 0, []buffers.KeyValuePair{{[]byte("pig"), []byte("dan")}}},
+			{[]byte("pig"), 0, 0, []buffers.KeyValuePair{{[]byte("pig"), []byte("dan")}}},
+			{[]byte("pigg"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("food"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("bandana"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("bare"), 0, 0, []buffers.KeyValuePair{}},
+		}
+		recordsToExpire := []testRecord{RECORDS[0], RECORDS[2], RECORDS[3]}
+		ttl := uint64(1)
+		insertRecords(t, store, SEARCH_RECORDS, nil)
+		insertRecords(t, store, recordsToExpire, &ttl)
+
+		// wait for some items to expire
+		time.Sleep(2 * time.Second)
+		for _, rec := range table {
+			got, err := store.Search(rec.term, rec.skip, rec.limit)
+			if err != nil {
+				t.Fatalf("error searching: %s", err)
+			}
+
+			assert.Equal(t, rec.expected, got)
+		}
+	})
+
+	t.Run("SearchAfterDeleteReturnsNoDeletedKeyValues", func(t *testing.T) {
+		table := []testParams{
+			{[]byte("f"), 0, 0, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}}},
+			{[]byte("fo"), 0, 0, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}}},
+			{[]byte("foo"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("for"), 0, 0, []buffers.KeyValuePair{{[]byte("fore"), []byte("span")}}},
+			{[]byte("b"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("ba"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("bar"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("ban"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("band"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("p"), 0, 0, []buffers.KeyValuePair{{[]byte("pig"), []byte("dan")}}},
+			{[]byte("pi"), 0, 0, []buffers.KeyValuePair{{[]byte("pig"), []byte("dan")}}},
+			{[]byte("pig"), 0, 0, []buffers.KeyValuePair{{[]byte("pig"), []byte("dan")}}},
+			{[]byte("pigg"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("food"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("bandana"), 0, 0, []buffers.KeyValuePair{}},
+			{[]byte("bare"), 0, 0, []buffers.KeyValuePair{}},
+		}
+		keysToDelete := [][]byte{[]byte("foo"), []byte("food"), []byte("bar"), []byte("band")}
+
+		insertRecords(t, store, SEARCH_RECORDS, nil)
+		deleteRecords(t, store, keysToDelete)
+
+		//for (term, expected) in test_data:
+		for _, rec := range table {
+			got, err := store.Search(rec.term, rec.skip, rec.limit)
+			if err != nil {
+				t.Fatalf("error searching: %s", err)
+			}
+
+			assert.Equal(t, rec.expected, got)
+		}
+	})
+
+	t.Run("SearchAfterClearReturnsAnEmptyList", func(t *testing.T) {
+		insertRecords(t, store, SEARCH_RECORDS, nil)
+		err := store.Clear()
+		if err != nil {
+			t.Fatalf("error clearing: %s", err)
+		}
+
+		for _, term := range SEARCH_TERMS {
+			got, err := store.Search(term, 0, 0)
+			if err != nil {
+				t.Fatalf("error searching: %s", err)
+			}
+
+			assert.Equal(t, []buffers.KeyValuePair{}, got)
+		}
+	})
+
 }
 
 func TestStore_Set(t *testing.T) {
@@ -481,6 +667,48 @@ func BenchmarkStore_GetWithTtl(b *testing.B) {
 	}
 }
 
+func BenchmarkStore_SearchWithoutPagination(b *testing.B) {
+	dbPath := "testdb_search"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store
+	store := createStoreForBenchmarks(b, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	insertRecordsForBenchmarks(b, store, SEARCH_RECORDS, nil)
+
+	for _, term := range SEARCH_TERMS {
+		b.Run(fmt.Sprintf("Search (no pagination) %s", term), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, _ = store.Search(term, 0, 0)
+			}
+		})
+	}
+}
+
+func BenchmarkStore_SearchWithPagination(b *testing.B) {
+	dbPath := "testdb_search"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store
+	store := createStoreForBenchmarks(b, dbPath, nil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	insertRecordsForBenchmarks(b, store, SEARCH_RECORDS, nil)
+
+	for _, term := range SEARCH_TERMS {
+		b.Run(fmt.Sprintf("Search (paginated) %s", term), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, _ = store.Search(term, 1, 2)
+			}
+		})
+	}
+}
+
 func BenchmarkStore_SetWithoutTtl(b *testing.B) {
 	dbPath := "testdb_set"
 	defer removeStoreForBenchmarks(b, dbPath)
@@ -527,13 +755,15 @@ func ExampleNew() {
 	var redundantBlocks uint16 = 1
 	var poolCapacity uint64 = 10
 	var compactionInterval uint32 = 1_800
+	var maxIndexKeyLen uint32 = 3
 
 	store, err := New(
 		"testdb",
 		&maxKeys,
 		&redundantBlocks,
 		&poolCapacity,
-		&compactionInterval)
+		&compactionInterval,
+		&maxIndexKeyLen)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
@@ -543,7 +773,7 @@ func ExampleNew() {
 }
 
 func ExampleStore_Set() {
-	store, err := New("testdb", nil, nil, nil, nil)
+	store, err := New("testdb", nil, nil, nil, nil, nil)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
@@ -564,7 +794,7 @@ func ExampleStore_Set() {
 }
 
 func ExampleStore_Get() {
-	store, err := New("testdb", nil, nil, nil, nil)
+	store, err := New("testdb", nil, nil, nil, nil, nil)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
@@ -585,8 +815,54 @@ func ExampleStore_Get() {
 	fmt.Printf("%s", value)
 	// Output: bar
 }
+
+func ExampleStore_Search() {
+	store, err := New("testdb", nil, nil, nil, nil, nil)
+	if err != nil {
+		log.Fatalf("error opening store: %s", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	data := []buffers.KeyValuePair{
+		{K: []byte("hi"), V: []byte("ooliyo")},
+		{K: []byte("high"), V: []byte("haiguru")},
+		{K: []byte("hind"), V: []byte("enyuma")},
+		{K: []byte("hill"), V: []byte("akasozi")},
+		{K: []byte("him"), V: []byte("ogwo")},
+	}
+
+	for _, rec := range data {
+		err = store.Set(rec.K, rec.V, nil)
+		if err != nil {
+			log.Fatalf("error setting key value: %s", err)
+		}
+	}
+
+	// without pagination
+	kvs, err := store.Search([]byte("hi"), 0, 0)
+	if err != nil {
+		log.Fatalf("error searching 'hi': %s", err)
+	}
+
+	fmt.Printf("\nno pagination: %v", kvs)
+
+	// with pagination: get last three
+	kvs, err = store.Search([]byte("hi"), 2, 3)
+	if err != nil {
+		log.Fatalf("error searching (paginated) 'hi': %s", err)
+	}
+
+	fmt.Printf("\nskip 2, limit 3: %v", kvs)
+
+	// Output:
+	// no pagination: [hi: ooliyo high: haiguru hind: enyuma hill: akasozi him: ogwo]
+	// skip 2, limit 3: [hind: enyuma hill: akasozi him: ogwo]
+}
+
 func ExampleStore_Delete() {
-	store, err := New("testdb", nil, nil, nil, nil)
+	store, err := New("testdb", nil, nil, nil, nil, nil)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
@@ -618,7 +894,7 @@ func removeStoreForBenchmarks(b *testing.B, path string) {
 
 // createStore is a utility to create a store at the given path
 func createStore(t *testing.T, path string, compactionInterval *uint32) *Store {
-	store, err := New(path, nil, nil, nil, compactionInterval)
+	store, err := New(path, nil, nil, nil, compactionInterval, nil)
 	if err != nil {
 		t.Fatalf("error opening store: %s", err)
 	}
@@ -627,7 +903,7 @@ func createStore(t *testing.T, path string, compactionInterval *uint32) *Store {
 
 // createStoreForBenchmarks is a utility to create a store at the given path
 func createStoreForBenchmarks(b *testing.B, path string, compactionInterval *uint32) *Store {
-	store, err := New(path, nil, nil, nil, compactionInterval)
+	store, err := New(path, nil, nil, nil, compactionInterval, nil)
 	if err != nil {
 		b.Fatalf("error opening store: %s", err)
 	}

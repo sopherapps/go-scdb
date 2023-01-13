@@ -3,8 +3,10 @@ package buffers
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/sopherapps/go-scdb/scdb/internal"
-	"github.com/sopherapps/go-scdb/scdb/internal/entries"
+	"github.com/sopherapps/go-scdb/scdb/internal/entries/headers"
+	"github.com/sopherapps/go-scdb/scdb/internal/entries/values"
 	"io"
 	"math"
 	"os"
@@ -12,6 +14,18 @@ import (
 )
 
 const DefaultPoolCapacity uint64 = 5
+
+// KeyValuePair is a pair of key and value
+//
+// It is especially useful when searching
+type KeyValuePair struct {
+	K []byte
+	V []byte
+}
+
+func (kv KeyValuePair) String() string {
+	return fmt.Sprintf("%s: %s", kv.K, kv.V)
+}
 
 // BufferPool is a pool of key-value and index Buffer's.
 //
@@ -65,15 +79,15 @@ func NewBufferPool(capacity *uint64, filePath string, maxKeys *uint64, redundant
 		return nil, err
 	}
 
-	var header *entries.DbFileHeader
+	var header *headers.DbFileHeader
 	if !dbFileExists {
-		header = entries.NewDbFileHeader(maxKeys, redundantBlocks, &bufSize)
+		header = headers.NewDbFileHeader(maxKeys, redundantBlocks, &bufSize)
 		_, err = initializeDbFile(file, header)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		header, err = entries.ExtractDbFileHeaderFromFile(file)
+		header, err = headers.ExtractDbFileHeaderFromFile(file)
 		if err != nil {
 			return nil, err
 		}
@@ -152,12 +166,12 @@ func (bp *BufferPool) Append(data []byte) (uint64, error) {
 // or (addr + data length) is greater than or equal BufferPool.keyValuesStartPoint
 func (bp *BufferPool) UpdateIndex(addr uint64, data []byte) error {
 	dataLength := uint64(len(data))
-	err := internal.ValidateBounds(addr, addr+dataLength, entries.HeaderSizeInBytes, bp.keyValuesStartPoint, "data is outside the index bounds")
+	err := internal.ValidateBounds(addr, addr+dataLength, headers.HeaderSizeInBytes, bp.keyValuesStartPoint, "data is outside the index bounds")
 	if err != nil {
 		return err
 	}
 
-	blockLeftOffset := bp.getBlockLeftOffset(addr, entries.HeaderSizeInBytes)
+	blockLeftOffset := bp.getBlockLeftOffset(addr, headers.HeaderSizeInBytes)
 	buf, ok := bp.indexBuffers[blockLeftOffset]
 	if ok {
 		err = buf.Replace(addr, data)
@@ -173,7 +187,7 @@ func (bp *BufferPool) UpdateIndex(addr uint64, data []byte) error {
 // ClearFile clears all data on disk and memory making it like a new store
 func (bp *BufferPool) ClearFile() error {
 	bufSize := uint32(bp.bufferSize)
-	header := entries.NewDbFileHeader(&bp.maxKeys, &bp.redundantBlocks, &bufSize)
+	header := headers.NewDbFileHeader(&bp.maxKeys, &bp.redundantBlocks, &bufSize)
 	fileSize, err := initializeDbFile(bp.File, header)
 	if err != nil {
 		return err
@@ -186,7 +200,7 @@ func (bp *BufferPool) ClearFile() error {
 
 // CompactFile removes any deleted or expired entries from the file. It must first lock the buffer and the file.
 // In order to be more efficient, it creates a new file, copying only that data which is not deleted or expired
-func (bp *BufferPool) CompactFile() error {
+func (bp *BufferPool) CompactFile(searchIndex *internal.InvertedIndex) error {
 	folder := filepath.Dir(bp.FilePath)
 	newFilePath := filepath.Join(folder, "tmp__compact.scdb")
 	newFile, err := os.OpenFile(newFilePath, os.O_RDWR|os.O_CREATE, 0666)
@@ -194,7 +208,7 @@ func (bp *BufferPool) CompactFile() error {
 		return err
 	}
 
-	header, err := entries.ExtractDbFileHeaderFromFile(bp.File)
+	header, err := headers.ExtractDbFileHeaderFromFile(bp.File)
 	if err != nil {
 		return err
 	}
@@ -205,11 +219,11 @@ func (bp *BufferPool) CompactFile() error {
 		return err
 	}
 
-	idxEntrySize := entries.IndexEntrySizeInBytes
+	idxEntrySize := headers.IndexEntrySizeInBytes
 	idxEntrySizeAsInt64 := int64(idxEntrySize)
 	zero := make([]byte, idxEntrySize)
 	zeroStr := string(zero)
-	idxOffset := int64(entries.HeaderSizeInBytes)
+	idxOffset := int64(headers.HeaderSizeInBytes)
 	newFileOffset := int64(header.KeyValuesStartPoint)
 
 	numOfBlocks := int64(header.NumberOfIndexBlocks)
@@ -238,7 +252,7 @@ func (bp *BufferPool) CompactFile() error {
 					return e
 				}
 
-				kv, e := entries.ExtractKeyValueEntryFromByteArray(kvByteArray, 0)
+				kv, e := values.ExtractKeyValueEntryFromByteArray(kvByteArray, 0)
 				if e != nil {
 					return e
 				}
@@ -252,10 +266,18 @@ func (bp *BufferPool) CompactFile() error {
 					}
 
 					// update index to have the index of the newly added key-value entry
-					_, er = newFile.WriteAt(internal.Uint64ToByteArray(uint64(newFileOffset)), idxOffset)
+					newKvAddr := uint64(newFileOffset)
+					_, er = newFile.WriteAt(internal.Uint64ToByteArray(newKvAddr), idxOffset)
 					if er != nil && !errors.Is(er, io.EOF) {
 						return er
 					}
+
+					// update search index
+					err = searchIndex.Add(kv.Key, newKvAddr, kv.Expiry)
+					if err != nil {
+						return err
+					}
+
 					// increment the new file offset
 					newFileOffset += kvSize
 				} else {
@@ -291,7 +313,7 @@ func (bp *BufferPool) CompactFile() error {
 
 // GetValue returns the *entries.KeyValueEntry at the given address if the key there corresponds to the given key
 // Otherwise, it returns nil. This is to handle hash collisions.
-func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*entries.KeyValueEntry, error) {
+func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*values.KeyValueEntry, error) {
 	if kvAddress == 0 {
 		return nil, nil
 	}
@@ -319,7 +341,7 @@ func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*entries.KeyValueE
 
 	// update kv_buffers only upto actual data read (cater for partially filled buffer)
 	bp.kvBuffers = append(bp.kvBuffers, NewBuffer(kvAddress, buf[:bytesRead], bp.bufferSize))
-	entry, err := entries.ExtractKeyValueEntryFromByteArray(buf, 0)
+	entry, err := values.ExtractKeyValueEntryFromByteArray(buf, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +357,7 @@ func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*entries.KeyValueE
 // is the same as the key provided. It returns true if successful
 func (bp *BufferPool) TryDeleteKvEntry(kvAddress uint64, key []byte) (bool, error) {
 	keySize := int64(len(key))
-	addrForIsDeleted := int64(kvAddress+entries.OffsetForKeyInKVArray) + keySize
+	addrForIsDeleted := int64(kvAddress+values.OffsetForKeyInKVArray) + keySize
 	// loop in reverse, starting at the back
 	// since the latest kv_buffers are the ones updated when new changes occur
 	kvBufLen := len(bp.kvBuffers)
@@ -410,7 +432,7 @@ func (bp *BufferPool) AddrBelongsToKey(kvAddress uint64, key []byte) (bool, erro
 	// update kv_buffers only upto actual data read (cater for partially filled buffer)
 	bp.kvBuffers = append(bp.kvBuffers, NewBuffer(kvAddress, buf[:bytesRead], bp.bufferSize))
 
-	keyInFile := buf[entries.OffsetForKeyInKVArray : entries.OffsetForKeyInKVArray+uint64(len(key))]
+	keyInFile := buf[values.OffsetForKeyInKVArray : values.OffsetForKeyInKVArray+uint64(len(key))]
 	isForKey := bytes.Contains(keyInFile, key)
 	return isForKey, nil
 }
@@ -420,15 +442,15 @@ func (bp *BufferPool) AddrBelongsToKey(kvAddress uint64, key []byte) (bool, erro
 // If the address is less than [HEADER_SIZE_IN_BYTES] or [BufferPool.key_values_start_point],
 // an ErrOutOfBounds error is returned
 func (bp *BufferPool) ReadIndex(addr uint64) ([]byte, error) {
-	err := internal.ValidateBounds(addr, addr+entries.IndexEntrySizeInBytes, entries.HeaderSizeInBytes, bp.keyValuesStartPoint, "out of index bounds")
+	err := internal.ValidateBounds(addr, addr+headers.IndexEntrySizeInBytes, headers.HeaderSizeInBytes, bp.keyValuesStartPoint, "out of index bounds")
 	if err != nil {
 		return nil, err
 	}
 
-	blockLeftOffset := bp.getBlockLeftOffset(addr, entries.HeaderSizeInBytes)
+	blockLeftOffset := bp.getBlockLeftOffset(addr, headers.HeaderSizeInBytes)
 	buf, ok := bp.indexBuffers[blockLeftOffset]
 	if ok {
-		return buf.ReadAt(addr, entries.IndexEntrySizeInBytes)
+		return buf.ReadAt(addr, headers.IndexEntrySizeInBytes)
 	}
 
 	data := make([]byte, bp.bufferSize)
@@ -443,7 +465,7 @@ func (bp *BufferPool) ReadIndex(addr uint64) ([]byte, error) {
 
 	if uint64(len(bp.indexBuffers)) >= bp.indexCapacity {
 		biggestLeftOffset := uint64(0)
-		for lftOffset, _ := range bp.indexBuffers {
+		for lftOffset := range bp.indexBuffers {
 			if lftOffset >= biggestLeftOffset {
 				biggestLeftOffset = lftOffset
 			}
@@ -458,13 +480,18 @@ func (bp *BufferPool) ReadIndex(addr uint64) ([]byte, error) {
 	}
 
 	start := addr - blockLeftOffset
-	return data[start : start+entries.IndexEntrySizeInBytes], nil
+	return data[start : start+headers.IndexEntrySizeInBytes], nil
+}
+
+// GetManyKeyValues gets all the key-value pairs that correspond to the given list of key-value addresses
+func (bp *BufferPool) GetManyKeyValues(addrs []uint64) ([]KeyValuePair, error) {
+	return nil, nil
 }
 
 // readIndexBlock returns the next index block
 func (bp *BufferPool) readIndexBlock(blockNum int64, blockSize int64) ([]byte, error) {
 	buf := make([]byte, blockSize)
-	offset := int64(entries.HeaderSizeInBytes) + (blockNum * blockSize)
+	offset := int64(headers.HeaderSizeInBytes) + (blockNum * blockSize)
 
 	bytesRead, err := bp.File.ReadAt(buf, offset)
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -540,7 +567,7 @@ func getIndexCapacity(numOfIndexBlocks uint64, totalCapacity uint64) uint64 {
 
 // initializeDbFile initializes the database file, giving it the header and the index place holders
 // and truncating it. It returns the new file size
-func initializeDbFile(file *os.File, header *entries.DbFileHeader) (int64, error) {
+func initializeDbFile(file *os.File, header *headers.DbFileHeader) (int64, error) {
 	headerBytes := header.AsBytes()
 	headerLength := int64(len(headerBytes))
 	finalSize := headerLength + int64(header.NumberOfIndexBlocks*header.NetBlockSize)
@@ -567,7 +594,7 @@ func initializeDbFile(file *os.File, header *entries.DbFileHeader) (int64, error
 
 // extractKeyAsByteArrayFromFile extracts the byte array for the key from a given file
 func extractKeyAsByteArrayFromFile(file *os.File, kvAddr uint64, keySize int64) ([]byte, error) {
-	offset := int64(kvAddr + entries.OffsetForKeyInKVArray)
+	offset := int64(kvAddr + values.OffsetForKeyInKVArray)
 	buf := make([]byte, keySize)
 	_, err := file.ReadAt(buf, offset)
 	if err != nil {

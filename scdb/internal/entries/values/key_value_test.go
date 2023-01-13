@@ -1,4 +1,4 @@
-package entries
+package values
 
 import (
 	"fmt"

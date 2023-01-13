@@ -1,4 +1,4 @@
-package entries
+package values
 
 import (
 	"github.com/sopherapps/go-scdb/scdb/internal"

@@ -1,7 +1,7 @@
 package buffers
 
 import (
-	"github.com/sopherapps/go-scdb/scdb/internal/entries"
+	"github.com/sopherapps/go-scdb/scdb/internal/entries/values"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -114,11 +114,11 @@ func TestBuffer_GetValue(t *testing.T) {
 		type testRecord struct {
 			addr     uint64
 			key      []byte
-			expected *entries.KeyValueEntry
+			expected *values.KeyValueEntry
 		}
 
 		buf := NewBuffer(79, KvDataArray, CAPACITY)
-		kv := entries.NewKeyValueEntry([]byte("foo"), []byte("bar"), 0)
+		kv := values.NewKeyValueEntry([]byte("foo"), []byte("bar"), 0)
 		testData := []testRecord{
 			{79, []byte("foo"), kv},
 			{79, []byte("bar"), nil},
