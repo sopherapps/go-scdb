@@ -662,7 +662,7 @@ func TestBufferPool_GetManyKeyValues(t *testing.T) {
 			t.Fatalf("error creating the db file header: %s", err)
 		}
 
-		addresses := make([]uint64, len(table))
+		addresses := make([]uint64, 0, len(table))
 		for _, pair := range table {
 			kv := values.NewKeyValueEntry(pair.K, pair.V, 0)
 			insertKeyValueEntry(t, pool, header, kv)
@@ -703,7 +703,7 @@ func TestBufferPool_GetManyKeyValues(t *testing.T) {
 			t.Fatalf("error creating the db file header: %s", err)
 		}
 
-		addresses := make([]uint64, len(nonExpired)+len(expired))
+		addresses := make([]uint64, 0, len(nonExpired)+len(expired))
 		for _, pair := range nonExpired {
 			kv := values.NewKeyValueEntry(pair.K, pair.V, 0)
 			insertKeyValueEntry(t, pool, header, kv)
@@ -752,7 +752,7 @@ func TestBufferPool_GetManyKeyValues(t *testing.T) {
 			t.Fatalf("error creating the db file header: %s", err)
 		}
 
-		addresses := make([]uint64, len(unDeleted)+len(deleted))
+		addresses := make([]uint64, 0, len(unDeleted)+len(deleted))
 		for _, pair := range unDeleted {
 			kv := values.NewKeyValueEntry(pair.K, pair.V, 0)
 			insertKeyValueEntry(t, pool, header, kv)

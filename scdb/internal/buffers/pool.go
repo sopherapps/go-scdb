@@ -504,7 +504,7 @@ func (bp *BufferPool) GetManyKeyValues(addrs []uint64) ([]KeyValuePair, error) {
 			return nil, err
 		}
 
-		if !entry.IsDeleted && entry.IsExpired() {
+		if !entry.IsDeleted && !entry.IsExpired() {
 			results = append(results, KeyValuePair{
 				K: entry.Key,
 				V: entry.Value,
