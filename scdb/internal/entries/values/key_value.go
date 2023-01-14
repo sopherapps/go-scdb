@@ -1,8 +1,7 @@
-package entries
+package values
 
 import (
 	"github.com/sopherapps/go-scdb/scdb/internal"
-	"time"
 )
 
 const KeyValueMinSizeInBytes uint32 = 4 + 4 + 8 + 1
@@ -110,12 +109,6 @@ func (kv *KeyValueEntry) AsBytes() []byte {
 	)
 }
 
-// IsExpired returns true if key has lived for longer than its time-to-live
-// It will always return false if time-to-live was never set
-func (kv *KeyValueEntry) IsExpired() bool {
-	if kv.Expiry == 0 {
-		return false
-	} else {
-		return kv.Expiry < uint64(time.Now().Unix())
-	}
+func (kv *KeyValueEntry) GetExpiry() uint64 {
+	return kv.Expiry
 }

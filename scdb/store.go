@@ -5,7 +5,9 @@ import (
 	"github.com/sopherapps/go-scdb/scdb/errors"
 	"github.com/sopherapps/go-scdb/scdb/internal"
 	"github.com/sopherapps/go-scdb/scdb/internal/buffers"
-	"github.com/sopherapps/go-scdb/scdb/internal/entries"
+	"github.com/sopherapps/go-scdb/scdb/internal/entries/headers"
+	"github.com/sopherapps/go-scdb/scdb/internal/entries/values"
+	"github.com/sopherapps/go-scdb/scdb/internal/inverted_index"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,6 +17,9 @@ import (
 // defaultDbFile is the default name of the database file that contains all the key-value pairs
 const defaultDbFile string = "dump.scdb"
 
+// defaultSearchIndexFile is the default name of the inverted index file that is for doing full-text search
+const defaultSearchIndexFile string = "index.iscdb"
+
 var zeroU64 = internal.Uint64ToByteArray(0)
 
 // Store is a key-value store that persists key-value pairs to disk
@@ -23,11 +28,12 @@ var zeroU64 = internal.Uint64ToByteArray(0)
 // on disk. It allows for specifying how long each key-value pair should be
 // kept for i.e. the time-to-live in seconds. If None is provided, they last indefinitely.
 type Store struct {
-	bufferPool *buffers.BufferPool
-	header     *entries.DbFileHeader
-	closeCh    chan bool
-	mu         sync.Mutex
-	isClosed   bool
+	bufferPool  *buffers.BufferPool
+	header      *headers.DbFileHeader
+	searchIndex *inverted_index.InvertedIndex
+	closeCh     chan bool
+	mu          sync.Mutex
+	isClosed    bool
 }
 
 // New creates a new Store at the given path
@@ -65,7 +71,12 @@ type Store struct {
 //     A new key-value pair is created and the old one is left unindexed.
 //     Compaction is important because it reclaims this space and reduces the size
 //     of the database file.
-func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *uint64, compactionInterval *uint32) (*Store, error) {
+//
+//   - `maxIndexKeyLen` - default 3:
+//     The maximum number of characters in each key in the search inverted index
+//     The inverted index is used for full-text search of keys to get all key-values
+//     whose keys start with a given byte array.
+func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *uint64, compactionInterval *uint32, maxIndexKeyLen *uint32) (*Store, error) {
 	err := os.MkdirAll(path, 0755)
 	if err != nil {
 		return nil, err
@@ -77,7 +88,13 @@ func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *ui
 		return nil, err
 	}
 
-	header, err := entries.ExtractDbFileHeaderFromFile(bufferPool.File)
+	header, err := headers.ExtractDbFileHeaderFromFile(bufferPool.File)
+	if err != nil {
+		return nil, err
+	}
+
+	searchIndexFilePath := filepath.Join(path, defaultSearchIndexFile)
+	searchIndex, err := inverted_index.NewInvertedIndex(searchIndexFilePath, maxIndexKeyLen, maxKeys, redundantBlocks)
 	if err != nil {
 		return nil, err
 	}
@@ -88,9 +105,10 @@ func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *ui
 	}
 
 	store := &Store{
-		bufferPool: bufferPool,
-		header:     header,
-		closeCh:    make(chan bool),
+		bufferPool:  bufferPool,
+		header:      header,
+		searchIndex: searchIndex,
+		closeCh:     make(chan bool),
 	}
 
 	go store.startBackgroundCompaction(interval)
@@ -109,10 +127,10 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 		expiry = uint64(time.Now().Unix()) + *ttl
 	}
 
-	initialIdxOffset := s.header.GetIndexOffset(k)
+	initialIdxOffset := headers.GetIndexOffset(s.header, k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
-		indexOffset, err := s.header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
+		indexOffset, err := headers.GetIndexOffsetInNthBlock(s.header, initialIdxOffset, idxBlock)
 		if err != nil {
 			return err
 		}
@@ -139,12 +157,19 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 		}
 
 		if isOffsetForKey {
-			kv := entries.NewKeyValueEntry(k, v, expiry)
+			kv := values.NewKeyValueEntry(k, v, expiry)
 			prevLastOffset, err := s.bufferPool.Append(kv.AsBytes())
 			if err != nil {
 				return err
 			}
-			return s.bufferPool.UpdateIndex(indexOffset, internal.Uint64ToByteArray(prevLastOffset))
+
+			err = s.bufferPool.UpdateIndex(indexOffset, internal.Uint64ToByteArray(prevLastOffset))
+			if err != nil {
+				return err
+			}
+
+			// Update the search index
+			return s.searchIndex.Add(k, prevLastOffset, expiry)
 		}
 
 	}
@@ -157,10 +182,10 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	initialIdxOffset := s.header.GetIndexOffset(k)
+	initialIdxOffset := headers.GetIndexOffset(s.header, k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
-		indexOffset, err := s.header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
+		indexOffset, err := headers.GetIndexOffsetInNthBlock(s.header, initialIdxOffset, idxBlock)
 		if err != nil {
 			return nil, err
 		}
@@ -192,15 +217,37 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 	return nil, nil
 }
 
+// Search searches for unexpired keys that start with the given search term
+//
+// It skips the first `skip` (default: 0) number of results and returns not more than
+// `limit` (default: 0) number of items. This is to avoid using up more memory than can be handled by the
+// host machine.
+//
+// If `limit` is 0, all items are returned since it would make no sense for someone to search
+// for zero items.
+//
+// returns a list of pairs of key-value i.e. `buffers.KeyValuePair`
+func (s *Store) Search(term []byte, skip uint64, limit uint64) ([]buffers.KeyValuePair, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	addrs, err := s.searchIndex.Search(term, skip, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.bufferPool.GetManyKeyValues(addrs)
+}
+
 // Delete removes the key-value for the given key
 func (s *Store) Delete(k []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	initialIdxOffset := s.header.GetIndexOffset(k)
+	initialIdxOffset := headers.GetIndexOffset(s.header, k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
-		indexOffset, err := s.header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
+		indexOffset, err := headers.GetIndexOffsetInNthBlock(s.header, initialIdxOffset, idxBlock)
 		if err != nil {
 			return err
 		}
@@ -229,8 +276,9 @@ func (s *Store) Delete(k []byte) error {
 		} // else continue looping
 
 	}
+	// if it is not found, no error is thrown
 
-	return nil // if it is not found, no error is thrown
+	return s.searchIndex.Remove(k)
 }
 
 // Clear removes all data in the store
@@ -238,7 +286,12 @@ func (s *Store) Clear() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.bufferPool.ClearFile()
+	err := s.bufferPool.ClearFile()
+	if err != nil {
+		return err
+	}
+
+	return s.searchIndex.Clear()
 }
 
 // Compact manually removes dangling key-value pairs in the database file
@@ -260,7 +313,7 @@ func (s *Store) Compact() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.bufferPool.CompactFile()
+	return s.bufferPool.CompactFile(s.searchIndex)
 }
 
 // Close frees up any resources occupied by store.
@@ -283,7 +336,13 @@ func (s *Store) Close() error {
 		return err
 	}
 
+	err = s.searchIndex.Close()
+	if err != nil {
+		return err
+	}
+
 	s.header = nil
+	s.searchIndex = nil
 
 	return nil
 }

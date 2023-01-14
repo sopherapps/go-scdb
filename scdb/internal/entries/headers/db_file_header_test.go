@@ -1,4 +1,4 @@
-package entries
+package headers
 
 import (
 	"fmt"
@@ -401,7 +401,7 @@ func TestDbFileHeader_AsBytes(t *testing.T) {
 
 func TestDbFileHeader_GetIndexOffset(t *testing.T) {
 	dbHeader := NewDbFileHeader(nil, nil, nil)
-	offset := dbHeader.GetIndexOffset([]byte("foo"))
+	offset := GetIndexOffset(dbHeader, []byte("foo"))
 	block1Start := HeaderSizeInBytes
 	block1End := dbHeader.NetBlockSize + block1Start
 	assert.LessOrEqual(t, block1Start, offset)
@@ -410,14 +410,14 @@ func TestDbFileHeader_GetIndexOffset(t *testing.T) {
 
 func TestDbFileHeader_GetIndexOffsetInNthBlock(t *testing.T) {
 	dbHeader := NewDbFileHeader(nil, nil, nil)
-	initialOffset := dbHeader.GetIndexOffset([]byte("foo"))
+	initialOffset := GetIndexOffset(dbHeader, []byte("foo"))
 	numberOfBlocks := dbHeader.NumberOfIndexBlocks
 
 	t.Run("GetIndexOffsetInNthBlockWorksAsExpected", func(t *testing.T) {
 		for i := uint64(0); i < numberOfBlocks; i++ {
 			blockStart := HeaderSizeInBytes + (i * dbHeader.NetBlockSize)
 			blockEnd := dbHeader.NetBlockSize + blockStart
-			offset, err := dbHeader.GetIndexOffsetInNthBlock(initialOffset, i)
+			offset, err := GetIndexOffsetInNthBlock(dbHeader, initialOffset, i)
 			if err != nil {
 				t.Fatalf("error getting index offset in nth block: %s", err)
 			}
@@ -428,7 +428,7 @@ func TestDbFileHeader_GetIndexOffsetInNthBlock(t *testing.T) {
 
 	t.Run("GetIndexOffsetReturnsErrOutOfBoundsIfNIsBeyondNumberOfIndexBlocksInHeader", func(t *testing.T) {
 		for i := numberOfBlocks; i < numberOfBlocks+2; i++ {
-			_, err := dbHeader.GetIndexOffsetInNthBlock(initialOffset, i)
+			_, err := GetIndexOffsetInNthBlock(dbHeader, initialOffset, i)
 			expectedError := errors.NewErrOutOfBounds(fmt.Sprintf("n %d is out of bounds", i))
 			assert.Equal(t, expectedError, err)
 		}

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2023-01-14
+
+### Added
+
+- Added full-text search for keys, with pagination using `store.Search(term, skip, limit)`
+
+### Changed
+
+- Changed the `scdb.New()` signature to include `maxIndexKeyLen` option.
+
+### Fixed
+
 ## [0.0.7] - 2022-11-9
 
 ### Added

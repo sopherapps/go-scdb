@@ -3,7 +3,9 @@ package buffers
 import (
 	"bytes"
 	"github.com/sopherapps/go-scdb/scdb/internal"
-	"github.com/sopherapps/go-scdb/scdb/internal/entries"
+	"github.com/sopherapps/go-scdb/scdb/internal/entries/headers"
+	"github.com/sopherapps/go-scdb/scdb/internal/entries/values"
+	"github.com/sopherapps/go-scdb/scdb/internal/inverted_index"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
@@ -40,45 +42,45 @@ func TestNewBufferPool(t *testing.T) {
 		testData := []testRecord{
 			{nil, fileName, nil, nil, nil, expectedRecord{
 				bufferSize:      uint64(os.Getpagesize()),
-				maxKeys:         entries.DefaultMaxKeys,
-				redundantBlocks: entries.DefaultRedundantBlocks,
+				maxKeys:         headers.DefaultMaxKeys,
+				redundantBlocks: headers.DefaultRedundantBlocks,
 				filePath:        fileName,
-				fileSize:        entries.NewDbFileHeader(nil, nil, nil).KeyValuesStartPoint,
+				fileSize:        headers.NewDbFileHeader(nil, nil, nil).KeyValuesStartPoint,
 			}},
 			{&testCapacity, fileName, nil, nil, nil, expectedRecord{
 				bufferSize:      uint64(os.Getpagesize()),
-				maxKeys:         entries.DefaultMaxKeys,
-				redundantBlocks: entries.DefaultRedundantBlocks,
+				maxKeys:         headers.DefaultMaxKeys,
+				redundantBlocks: headers.DefaultRedundantBlocks,
 				filePath:        fileName,
-				fileSize:        entries.NewDbFileHeader(nil, nil, nil).KeyValuesStartPoint,
+				fileSize:        headers.NewDbFileHeader(nil, nil, nil).KeyValuesStartPoint,
 			}},
 			{nil, fileName, nil, nil, nil, expectedRecord{
 				bufferSize:      uint64(os.Getpagesize()),
-				maxKeys:         entries.DefaultMaxKeys,
-				redundantBlocks: entries.DefaultRedundantBlocks,
+				maxKeys:         headers.DefaultMaxKeys,
+				redundantBlocks: headers.DefaultRedundantBlocks,
 				filePath:        fileName,
-				fileSize:        entries.NewDbFileHeader(nil, nil, nil).KeyValuesStartPoint,
+				fileSize:        headers.NewDbFileHeader(nil, nil, nil).KeyValuesStartPoint,
 			}},
 			{nil, fileName, &testMaxKeys, nil, nil, expectedRecord{
 				bufferSize:      uint64(os.Getpagesize()),
 				maxKeys:         testMaxKeys,
-				redundantBlocks: entries.DefaultRedundantBlocks,
+				redundantBlocks: headers.DefaultRedundantBlocks,
 				filePath:        fileName,
-				fileSize:        entries.NewDbFileHeader(&testMaxKeys, nil, nil).KeyValuesStartPoint,
+				fileSize:        headers.NewDbFileHeader(&testMaxKeys, nil, nil).KeyValuesStartPoint,
 			}},
 			{nil, fileName, nil, &testRedundantBlocks, nil, expectedRecord{
 				bufferSize:      uint64(os.Getpagesize()),
-				maxKeys:         entries.DefaultMaxKeys,
+				maxKeys:         headers.DefaultMaxKeys,
 				redundantBlocks: testRedundantBlocks,
 				filePath:        fileName,
-				fileSize:        entries.NewDbFileHeader(nil, &testRedundantBlocks, nil).KeyValuesStartPoint,
+				fileSize:        headers.NewDbFileHeader(nil, &testRedundantBlocks, nil).KeyValuesStartPoint,
 			}},
 			{nil, fileName, nil, nil, &testBufferSize, expectedRecord{
 				bufferSize:      uint64(testBufferSize),
-				maxKeys:         entries.DefaultMaxKeys,
-				redundantBlocks: entries.DefaultRedundantBlocks,
+				maxKeys:         headers.DefaultMaxKeys,
+				redundantBlocks: headers.DefaultRedundantBlocks,
 				filePath:        fileName,
-				fileSize:        entries.NewDbFileHeader(nil, nil, &testBufferSize).KeyValuesStartPoint,
+				fileSize:        headers.NewDbFileHeader(nil, nil, &testBufferSize).KeyValuesStartPoint,
 			}},
 		}
 
@@ -266,7 +268,7 @@ func TestBufferPool_UpdateIndex(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
-		offset := entries.HeaderSizeInBytes + 5
+		offset := headers.HeaderSizeInBytes + 5
 		initialFileSize := pool.FileSize
 		writeToFile(t, fileName, int64(offset), data)
 
@@ -303,7 +305,7 @@ func TestBufferPool_UpdateIndex(t *testing.T) {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
 
-		initialOffset := entries.HeaderSizeInBytes
+		initialOffset := headers.HeaderSizeInBytes
 		initialFileSize := pool.FileSize
 
 		writeToFile(t, fileName, int64(initialOffset), initialData)
@@ -346,11 +348,11 @@ func TestBufferPool_UpdateIndex(t *testing.T) {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
 
-		appendIndexBuffer(pool, entries.HeaderSizeInBytes+2, initialData)
+		appendIndexBuffer(pool, headers.HeaderSizeInBytes+2, initialData)
 		addresses := []uint64{
 			pool.keyValuesStartPoint + 3,
 			pool.keyValuesStartPoint + 50,
-			entries.HeaderSizeInBytes - 6,
+			headers.HeaderSizeInBytes - 6,
 		}
 
 		for _, addr := range addresses {
@@ -392,13 +394,13 @@ func TestBufferPool_ClearFile(t *testing.T) {
 	appendKvBuffer(pool, initialOffset, initialData)
 	appendKvBuffer(pool, 0, headerArray)
 
-	headerPreClear, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+	headerPreClear, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 	if err != nil {
 		t.Fatalf("error extracting header from pool file: %s", err)
 	}
 
-	kv1 := entries.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
-	kv2 := entries.NewKeyValueEntry([]byte("foo"), []byte("baracuda"), uint64(time.Now().Unix()*2))
+	kv1 := values.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
+	kv2 := values.NewKeyValueEntry([]byte("foo"), []byte("baracuda"), uint64(time.Now().Unix()*2))
 
 	insertKeyValueEntry(t, pool, headerPreClear, kv1)
 	insertKeyValueEntry(t, pool, headerPreClear, kv2)
@@ -409,7 +411,7 @@ func TestBufferPool_ClearFile(t *testing.T) {
 	}
 	finalFileSize := getActualFileSize(t, fileName)
 
-	header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+	header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 	if err != nil {
 		t.Fatalf("error extracting header from pool file: %s", err)
 	}
@@ -435,6 +437,7 @@ func TestBufferPool_ClearFile(t *testing.T) {
 
 func TestBufferPool_CompactFile(t *testing.T) {
 	fileName := "testdb_pool.scdb"
+	indexFileName := "testdb_pool.iscdb"
 	defer func() {
 		_ = os.Remove(fileName)
 	}()
@@ -443,11 +446,11 @@ func TestBufferPool_CompactFile(t *testing.T) {
 	_ = os.Remove(fileName)
 
 	futureTimestamp := uint64(time.Now().Unix() * 2)
-	neverExpires := entries.NewKeyValueEntry([]byte("never_expires"), []byte("bar"), 0)
-	deleted := entries.NewKeyValueEntry([]byte("deleted"), []byte("bok"), 0)
+	neverExpires := values.NewKeyValueEntry([]byte("never_expires"), []byte("bar"), 0)
+	deleted := values.NewKeyValueEntry([]byte("deleted"), []byte("bok"), 0)
 	// 1666023836u64 is some past timestamp in October 2022
-	expired := entries.NewKeyValueEntry([]byte("expired"), []byte("bar"), 1666023836)
-	notExpired := entries.NewKeyValueEntry([]byte("not_expired"), []byte("bar"), futureTimestamp)
+	expired := values.NewKeyValueEntry([]byte("expired"), []byte("bar"), 1666023836)
+	notExpired := values.NewKeyValueEntry([]byte("not_expired"), []byte("bar"), futureTimestamp)
 
 	// Limit the max_keys to 10 otherwise the memory will be consumed when we try to get all data in file
 	maxKeys := uint64(10)
@@ -458,7 +461,7 @@ func TestBufferPool_CompactFile(t *testing.T) {
 
 	appendKvBuffer(pool, 0, []byte{76, 79})
 
-	header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+	header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 	if err != nil {
 		t.Fatalf("error extracting header from file: %s", err)
 	}
@@ -474,7 +477,12 @@ func TestBufferPool_CompactFile(t *testing.T) {
 
 	initialFileSize := getActualFileSize(t, fileName)
 
-	err = pool.CompactFile()
+	searchIndex, err := inverted_index.NewInvertedIndex(indexFileName, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("error creating a search index: %s", err)
+	}
+
+	err = pool.CompactFile(searchIndex)
 	if err != nil {
 		t.Fatalf("error compacting db file: %s", err)
 	}
@@ -508,13 +516,13 @@ func TestBufferPool_GetValue(t *testing.T) {
 	}()
 
 	t.Run("BufferPool_GetValueForNonExistingBufferGetsValueFromFileDirectly", func(t *testing.T) {
-		kv := entries.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
+		kv := values.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
 
 		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
-		header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 		if err != nil {
 			t.Fatalf("error extracting db file header from file: %s", err)
 		}
@@ -536,13 +544,13 @@ func TestBufferPool_GetValue(t *testing.T) {
 	})
 
 	t.Run("BufferPool_GetValueFromExistingBufferGetsValueFromBuffer", func(t *testing.T) {
-		kv := entries.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
+		kv := values.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
 
 		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
-		header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 		if err != nil {
 			t.Fatalf("error extracting db file header from file: %s", err)
 		}
@@ -571,13 +579,13 @@ func TestBufferPool_GetValue(t *testing.T) {
 
 	t.Run("BufferPool_GetValueForExpiredValueReturnsNil", func(t *testing.T) {
 		// 1666023836u64 is some past timestamp in October 2022 so this is expired
-		kv := entries.NewKeyValueEntry([]byte("expires"), []byte("bar"), 1666023836)
+		kv := values.NewKeyValueEntry([]byte("expires"), []byte("bar"), 1666023836)
 
 		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
-		header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 		if err != nil {
 			t.Fatalf("error extracting db file header from file: %s", err)
 		}
@@ -599,13 +607,13 @@ func TestBufferPool_GetValue(t *testing.T) {
 	})
 
 	t.Run("BufferPool_GetValueForDeletedValueReturnsNil", func(t *testing.T) {
-		kv := entries.NewKeyValueEntry([]byte("deleted"), []byte("bar"), 0)
+		kv := values.NewKeyValueEntry([]byte("deleted"), []byte("bar"), 0)
 
 		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
-		header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 		if err != nil {
 			t.Fatalf("error extracting db file header from file: %s", err)
 		}
@@ -629,6 +637,150 @@ func TestBufferPool_GetValue(t *testing.T) {
 	})
 }
 
+func TestBufferPool_GetManyKeyValues(t *testing.T) {
+	fileName := "testdb_pool.scdb"
+
+	t.Run("GetManyKeyValuesReturnsTheKeyValuesForTheGivenAddresses", func(t *testing.T) {
+		defer func() {
+			_ = os.Remove(fileName)
+		}()
+
+		table := []KeyValuePair{
+			{[]byte("kv"), []byte("bar")},
+			{[]byte("hey"), []byte("man")},
+			{[]byte("holla"), []byte("pension")},
+			{[]byte("putty"), []byte("6788")},
+			{[]byte("ninety-nine"), []byte("millenium")},
+		}
+
+		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("error creating the buffer pool: %s", err)
+		}
+
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
+		if err != nil {
+			t.Fatalf("error creating the db file header: %s", err)
+		}
+
+		addresses := make([]uint64, 0, len(table))
+		for _, pair := range table {
+			kv := values.NewKeyValueEntry(pair.K, pair.V, 0)
+			insertKeyValueEntry(t, pool, header, kv)
+			kvAddr := getKvAddress(t, pool, header, kv)
+			addresses = append(addresses, kvAddr)
+		}
+
+		got, err := pool.GetManyKeyValues(addresses)
+		if err != nil {
+			t.Fatalf("error getting many key values: %s", err)
+		}
+
+		assert.Equal(t, table, got)
+	})
+
+	t.Run("GetManyKeyValuesNeverReturnsExpiredKeyValues", func(t *testing.T) {
+		defer func() {
+			_ = os.Remove(fileName)
+		}()
+
+		nonExpired := []KeyValuePair{
+			{[]byte("kv"), []byte("bar")},
+			{[]byte("hey"), []byte("man")}}
+
+		expired := []KeyValuePair{
+			{[]byte("holla"), []byte("pension")},
+			{[]byte("putty"), []byte("6788")},
+			{[]byte("ninety-nine"), []byte("millenium")},
+		}
+
+		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("error creating the buffer pool: %s", err)
+		}
+
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
+		if err != nil {
+			t.Fatalf("error creating the db file header: %s", err)
+		}
+
+		addresses := make([]uint64, 0, len(nonExpired)+len(expired))
+		for _, pair := range nonExpired {
+			kv := values.NewKeyValueEntry(pair.K, pair.V, 0)
+			insertKeyValueEntry(t, pool, header, kv)
+			kvAddr := getKvAddress(t, pool, header, kv)
+			addresses = append(addresses, kvAddr)
+		}
+
+		for _, pair := range expired {
+			// 1666023836 is some past timestamp in October 2022 so this is expired
+			kv := values.NewKeyValueEntry(pair.K, pair.V, uint64(1666023836))
+			insertKeyValueEntry(t, pool, header, kv)
+			kvAddr := getKvAddress(t, pool, header, kv)
+			addresses = append(addresses, kvAddr)
+		}
+
+		got, err := pool.GetManyKeyValues(addresses)
+		if err != nil {
+			t.Fatalf("error getting many key values: %s", err)
+		}
+
+		assert.Equal(t, nonExpired, got)
+	})
+
+	t.Run("GetManyKeyValuesNeverReturnsDeletedKeyValues", func(t *testing.T) {
+		defer func() {
+			_ = os.Remove(fileName)
+		}()
+
+		deleted := []KeyValuePair{
+			{[]byte("kv"), []byte("bar")},
+			{[]byte("hey"), []byte("man")}}
+
+		unDeleted := []KeyValuePair{
+			{[]byte("holla"), []byte("pension")},
+			{[]byte("putty"), []byte("6788")},
+			{[]byte("ninety-nine"), []byte("millenium")},
+		}
+
+		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("error creating the buffer pool: %s", err)
+		}
+
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
+		if err != nil {
+			t.Fatalf("error creating the db file header: %s", err)
+		}
+
+		addresses := make([]uint64, 0, len(unDeleted)+len(deleted))
+		for _, pair := range unDeleted {
+			kv := values.NewKeyValueEntry(pair.K, pair.V, 0)
+			insertKeyValueEntry(t, pool, header, kv)
+			kvAddr := getKvAddress(t, pool, header, kv)
+			addresses = append(addresses, kvAddr)
+		}
+
+		for _, pair := range deleted {
+			kv := values.NewKeyValueEntry(pair.K, pair.V, 0)
+			insertKeyValueEntry(t, pool, header, kv)
+			kvAddr := getKvAddress(t, pool, header, kv)
+			addresses = append(addresses, kvAddr)
+			_, err = pool.TryDeleteKvEntry(kvAddr, kv.Key)
+			if err != nil {
+				t.Fatalf("error try deleting kv entry: %s", err)
+			}
+		}
+
+		got, err := pool.GetManyKeyValues(addresses)
+		if err != nil {
+			t.Fatalf("error getting many key values: %s", err)
+		}
+
+		assert.Equal(t, unDeleted, got)
+	})
+}
+
 func TestBufferPool_AddrBelongsToKey(t *testing.T) {
 	fileName := "testdb_pool.scdb"
 	defer func() {
@@ -636,14 +788,14 @@ func TestBufferPool_AddrBelongsToKey(t *testing.T) {
 	}()
 
 	t.Run("BufferPool_AddrBelongsToKeyChecksIfKeyValueEntryAtGivenAddressHasGivenKey", func(t *testing.T) {
-		kv1 := entries.NewKeyValueEntry([]byte("never"), []byte("bar"), 0)
-		kv2 := entries.NewKeyValueEntry([]byte("foo"), []byte("baracuda"), 0)
+		kv1 := values.NewKeyValueEntry([]byte("never"), []byte("bar"), 0)
+		kv2 := values.NewKeyValueEntry([]byte("foo"), []byte("baracuda"), 0)
 
 		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
-		header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 		if err != nil {
 			t.Fatalf("error extracting db file header from file: %s", err)
 		}
@@ -684,13 +836,13 @@ func TestBufferPool_AddrBelongsToKey(t *testing.T) {
 
 	t.Run("BufferPool_AddrBelongsToKeyForAnExpiredKeyReturnsTrue", func(t *testing.T) {
 		// 1666023836 is some past timestamp in October 2022 so this is expired
-		kv := entries.NewKeyValueEntry([]byte("expires"), []byte("bar"), 1666023836)
+		kv := values.NewKeyValueEntry([]byte("expires"), []byte("bar"), 1666023836)
 
 		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
-		header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 		if err != nil {
 			t.Fatalf("error extracting db file header from file: %s", err)
 		}
@@ -712,13 +864,13 @@ func TestBufferPool_AddrBelongsToKey(t *testing.T) {
 	})
 
 	t.Run("BufferPool_AddrBelongsToKeyForOutOfBoundsAddressReturnsFalse", func(t *testing.T) {
-		kv := entries.NewKeyValueEntry([]byte("foo"), []byte("bar"), 0)
+		kv := values.NewKeyValueEntry([]byte("foo"), []byte("bar"), 0)
 
 		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
-		header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 		if err != nil {
 			t.Fatalf("error extracting db file header from file: %s", err)
 		}
@@ -745,14 +897,14 @@ func TestBufferPool_TryDeleteKvEntry(t *testing.T) {
 		_ = os.Remove(fileName)
 	}()
 
-	kv1 := entries.NewKeyValueEntry([]byte("never"), []byte("bar"), 0)
-	kv2 := entries.NewKeyValueEntry([]byte("foo"), []byte("baracuda"), 0)
+	kv1 := values.NewKeyValueEntry([]byte("never"), []byte("bar"), 0)
+	kv2 := values.NewKeyValueEntry([]byte("foo"), []byte("baracuda"), 0)
 
 	pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("error creating new buffer pool: %s", err)
 	}
-	header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+	header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 	if err != nil {
 		t.Fatalf("error extracting db file header from file: %s", err)
 	}
@@ -837,20 +989,20 @@ func TestBufferPool_ReadIndex(t *testing.T) {
 	}()
 
 	t.Run("BufferPool_ReadIndexReadsIndexAtGivenAddressIfAddressIsWithinTheIndexBands", func(t *testing.T) {
-		kv := entries.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
+		kv := values.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
 
 		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
-		header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 		if err != nil {
 			t.Fatalf("error extracting db file header from file: %s", err)
 		}
 
 		insertKeyValueEntry(t, pool, header, kv)
 
-		indexAddr := header.GetIndexOffset(kv.Key)
+		indexAddr := headers.GetIndexOffset(header, kv.Key)
 		kvAddr := getKvAddress(t, pool, header, kv)
 
 		got, err := pool.ReadIndex(indexAddr)
@@ -868,13 +1020,13 @@ func TestBufferPool_ReadIndex(t *testing.T) {
 	})
 
 	t.Run("BufferPool_ReadIndexReturnsErrorIfGivenAddressIsOutsideTheIndexBands", func(t *testing.T) {
-		kv := entries.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
+		kv := values.NewKeyValueEntry([]byte("kv"), []byte("bar"), 0)
 
 		pool, err := NewBufferPool(nil, fileName, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("error creating new buffer pool: %s", err)
 		}
-		header, err := entries.ExtractDbFileHeaderFromFile(pool.File)
+		header, err := headers.ExtractDbFileHeaderFromFile(pool.File)
 		if err != nil {
 			t.Fatalf("error extracting db file header from file: %s", err)
 		}
@@ -882,7 +1034,7 @@ func TestBufferPool_ReadIndex(t *testing.T) {
 		insertKeyValueEntry(t, pool, header, kv)
 
 		kvAddr := getKvAddress(t, pool, header, kv)
-		valueAddr := kvAddr + uint64(entries.KeyValueMinSizeInBytes) + uint64(kv.KeySize)
+		valueAddr := kvAddr + uint64(values.KeyValueMinSizeInBytes) + uint64(kv.KeySize)
 		fileSize := getActualFileSize(t, fileName)
 
 		testData := []uint64{kvAddr, valueAddr, fileSize}
@@ -957,8 +1109,8 @@ func writeToFile(t *testing.T, filePath string, offset int64, data []byte) {
 }
 
 // insertKeyValueEntry inserts a key value entry into the pool, updating the index also
-func insertKeyValueEntry(t *testing.T, pool *BufferPool, header *entries.DbFileHeader, kv *entries.KeyValueEntry) {
-	idxAddr := header.GetIndexOffset(kv.Key)
+func insertKeyValueEntry(t *testing.T, pool *BufferPool, header *headers.DbFileHeader, kv *values.KeyValueEntry) {
+	idxAddr := headers.GetIndexOffset(header, kv.Key)
 	kvAddr, err := pool.Append(kv.AsBytes())
 	if err != nil {
 		t.Fatalf("error appending kv: %s", err)
@@ -971,9 +1123,9 @@ func insertKeyValueEntry(t *testing.T, pool *BufferPool, header *entries.DbFileH
 }
 
 // getKvAddress returns the address for the given key value entry within the buffer pool
-func getKvAddress(t *testing.T, pool *BufferPool, header *entries.DbFileHeader, kv *entries.KeyValueEntry) uint64 {
-	kvAddr := make([]byte, entries.IndexEntrySizeInBytes)
-	indexAddr := int64(header.GetIndexOffset(kv.Key))
+func getKvAddress(t *testing.T, pool *BufferPool, header *headers.DbFileHeader, kv *values.KeyValueEntry) uint64 {
+	kvAddr := make([]byte, headers.IndexEntrySizeInBytes)
+	indexAddr := int64(headers.GetIndexOffset(header, kv.Key))
 
 	_, err := pool.File.ReadAt(kvAddr, indexAddr)
 	if err != nil {
@@ -989,8 +1141,8 @@ func getKvAddress(t *testing.T, pool *BufferPool, header *entries.DbFileHeader, 
 }
 
 // deleteKeyValue deletes a given key value in the given pool
-func deleteKeyValue(t *testing.T, pool *BufferPool, header *entries.DbFileHeader, kv *entries.KeyValueEntry) {
-	indexAddr := header.GetIndexOffset(kv.Key)
+func deleteKeyValue(t *testing.T, pool *BufferPool, header *headers.DbFileHeader, kv *values.KeyValueEntry) {
+	indexAddr := headers.GetIndexOffset(header, kv.Key)
 	err := pool.UpdateIndex(indexAddr, internal.Uint64ToByteArray(0))
 	if err != nil {
 		t.Fatalf("error updating index: %s", err)
@@ -998,9 +1150,9 @@ func deleteKeyValue(t *testing.T, pool *BufferPool, header *entries.DbFileHeader
 }
 
 // keyValueExists checks whether a given key value entry exists in the data array got from the file
-func keyValueExists(t *testing.T, data []byte, header *entries.DbFileHeader, kv *entries.KeyValueEntry) bool {
-	idxItemSize := entries.IndexEntrySizeInBytes
-	idxAddr := header.GetIndexOffset(kv.Key)
+func keyValueExists(t *testing.T, data []byte, header *headers.DbFileHeader, kv *values.KeyValueEntry) bool {
+	idxItemSize := headers.IndexEntrySizeInBytes
+	idxAddr := headers.GetIndexOffset(header, kv.Key)
 	kvAddrByteArray := data[idxAddr : idxAddr+idxItemSize]
 	zero := make([]byte, idxItemSize)
 
