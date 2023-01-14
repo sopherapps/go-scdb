@@ -177,6 +177,52 @@ func (idx *InvertedIndex) Search(term []byte, skip uint64, limit uint64) ([]uint
 
 // Remove deletes the key's kv address from all prefixes' lists in the inverted index
 func (idx *InvertedIndex) Remove(key []byte) error {
+	upperBound := uint32(math.Min(float64(len(key)), float64(idx.MaxIndexKeyLen))) + 1
+
+	for i := uint32(1); i < upperBound; i++ {
+		prefix := key[:i]
+
+		indexBlock := uint64(0)
+		indexOffset := headers.GetIndexOffset(idx.header, prefix)
+
+		for {
+			indexOffset, err := headers.GetIndexOffsetInNthBlock(idx.header, indexOffset, indexBlock)
+			if err != nil {
+				return err
+			}
+
+			addr, err := idx.readEntryAddress(indexOffset)
+			if err != nil {
+				return err
+			}
+
+			if bytes.Equal(addr, zeroU64Bytes) {
+				// prefix does not exist
+				break
+			}
+
+			isForPrefix, err := idx.addrBelongsToPrefix(addr, prefix)
+			if err != nil {
+				return err
+			}
+
+			if isForPrefix {
+				err = idx.removeKeyForPrefix(indexOffset, addr, key)
+				if err != nil {
+					return err
+				}
+
+				break
+			}
+
+			indexBlock += 1
+			if indexBlock >= idx.header.NumberOfIndexBlocks {
+				// prefix not found
+				break
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -402,6 +448,117 @@ func (idx *InvertedIndex) upsertEntry(prefix []byte, rootAddr []byte, key []byte
 	}
 
 	return nil
+}
+
+// removeKeyForPrefix removes the given key from the cyclic linked list for the given `rootAddr`
+func (idx *InvertedIndex) removeKeyForPrefix(indexAddr uint64, rootAddr []byte, key []byte) error {
+	rootAddrU64, err := internal.Uint64FromByteArray(rootAddr)
+	if err != nil {
+		return err
+	}
+
+	addr := rootAddrU64
+
+	for {
+		entryBytes, err := readEntryBytes(idx.File, addr)
+		if err != nil {
+			return err
+		}
+
+		entry, err := values.ExtractInvertedIndexEntryFromByteArray(entryBytes, 0)
+		if err != nil {
+			return err
+		}
+
+		if bytes.Equal(entry.Key, key) {
+			previousAddr := entry.PreviousOffset
+			nextAddr := entry.NextOffset
+
+			// Deal with the next item
+			if nextAddr != addr {
+				nextEntryBytes, err := readEntryBytes(idx.File, nextAddr)
+				if err != nil {
+					return err
+				}
+
+				nextEntry, err := values.ExtractInvertedIndexEntryFromByteArray(nextEntryBytes, 0)
+				if err != nil {
+					return err
+				}
+
+				nextEntry.PreviousOffset = entry.PreviousOffset
+
+				// if next addr is the same as the previous addr, treat nextEntry as previous also
+				if nextAddr == previousAddr {
+					nextEntry.NextOffset = entry.NextOffset
+				}
+
+				// make next entry a root entry since the one being removed is a root entry
+				if entry.IsRoot {
+					nextEntry.IsRoot = true
+					// update the root address so that it does not loop forever
+					rootAddrU64 = nextAddr
+				}
+
+				_, err = writeEntryToFile(idx.File, nextAddr, nextEntry)
+				if err != nil {
+					return err
+				}
+			}
+
+			// Deal with previous item
+			if previousAddr != addr && previousAddr != nextAddr {
+				prevEntryBytes, err := readEntryBytes(idx.File, previousAddr)
+				if err != nil {
+					return err
+				}
+
+				prevEntry, err := values.ExtractInvertedIndexEntryFromByteArray(prevEntryBytes, 0)
+				if err != nil {
+					return err
+				}
+
+				prevEntry.NextOffset = entry.NextOffset
+				_, err = writeEntryToFile(idx.File, previousAddr, prevEntry)
+				if err != nil {
+					return err
+				}
+			}
+
+			// Deal with current item
+			entry.IsDeleted = true
+			_, err = writeEntryToFile(idx.File, addr, entry)
+			if err != nil {
+				return err
+			}
+
+			// Update index
+			// if the entry to delete is at the root, and is the only element, reset the index
+			if addr == rootAddrU64 && nextAddr == addr {
+				_, err = idx.File.WriteAt(zeroU64Bytes, int64(indexAddr))
+				if err != nil {
+					return err
+				}
+			} else if entry.IsRoot {
+				// the entry being removed is a root entry but there are other elements after it
+				// Update the index to contain the address of the next entry
+				_, err = idx.File.WriteAt(internal.Uint64ToByteArray(nextAddr), int64(indexAddr))
+				if err != nil {
+					return err
+				}
+			}
+
+			addr = entry.NextOffset
+			// if we have cycled back to the root entry, exit
+			// The zero check is for data corruption
+			if addr == rootAddrU64 || addr == 0 {
+				break
+			}
+		}
+	}
+
+	return nil
+
 }
 
 // writeEntryToFile writes a given entry to the file at the given address, returning the number of bytes written
