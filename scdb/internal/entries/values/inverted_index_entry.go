@@ -1,6 +1,9 @@
 package values
 
-import "github.com/sopherapps/go-scdb/scdb/internal"
+import (
+	"github.com/sopherapps/go-scdb/scdb/internal"
+	"os"
+)
 
 const InvertedIndexEntryMinSizeInBytes uint32 = 4 + 4 + 1 + 1 + 8 + 8 + 8 + 8
 
@@ -157,4 +160,20 @@ func (ide *InvertedIndexEntry) AsBytes() []byte {
 		internal.Uint64ToByteArray(ide.PreviousOffset),
 		internal.Uint64ToByteArray(ide.KvAddress),
 	)
+}
+
+// UpdateNextOffsetOnFile updates the next offset of a given entry on the given file at the given address
+func (ide *InvertedIndexEntry) UpdateNextOffsetOnFile(file *os.File, entryAddr uint64, newNextOffset uint64) error {
+	kSize := uint64(ide.Size - ide.IndexKeySize - InvertedIndexEntryMinSizeInBytes)
+	offset := entryAddr + kSize + uint64(ide.IndexKeySize) + 18
+	_, err := file.WriteAt(internal.Uint64ToByteArray(newNextOffset), int64(offset))
+	return err
+}
+
+// UpdatePreviousOffsetOnFile updates the previous offset of a given entry on the given file at the given address
+func (ide *InvertedIndexEntry) UpdatePreviousOffsetOnFile(file *os.File, entryAddr uint64, newPreviousOffset uint64) error {
+	kSize := uint64(ide.Size - ide.IndexKeySize - InvertedIndexEntryMinSizeInBytes)
+	offset := entryAddr + kSize + uint64(ide.IndexKeySize) + 26
+	_, err := file.WriteAt(internal.Uint64ToByteArray(newPreviousOffset), int64(offset))
+	return err
 }
