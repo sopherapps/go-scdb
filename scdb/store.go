@@ -121,10 +121,10 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 		expiry = uint64(time.Now().Unix()) + *ttl
 	}
 
-	initialIdxOffset := s.header.GetIndexOffset(k)
+	initialIdxOffset := headers.GetIndexOffset(s.header, k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
-		indexOffset, err := s.header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
+		indexOffset, err := headers.GetIndexOffsetInNthBlock(s.header, initialIdxOffset, idxBlock)
 		if err != nil {
 			return err
 		}
@@ -176,10 +176,10 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	initialIdxOffset := s.header.GetIndexOffset(k)
+	initialIdxOffset := headers.GetIndexOffset(s.header, k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
-		indexOffset, err := s.header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
+		indexOffset, err := headers.GetIndexOffsetInNthBlock(s.header, initialIdxOffset, idxBlock)
 		if err != nil {
 			return nil, err
 		}
@@ -244,10 +244,10 @@ func (s *Store) Delete(k []byte) error {
 		ch <- s.searchIndex.Remove(k)
 	}(done)
 
-	initialIdxOffset := s.header.GetIndexOffset(k)
+	initialIdxOffset := headers.GetIndexOffset(s.header, k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
-		indexOffset, err := s.header.GetIndexOffsetInNthBlock(initialIdxOffset, idxBlock)
+		indexOffset, err := headers.GetIndexOffsetInNthBlock(s.header, initialIdxOffset, idxBlock)
 		if err != nil {
 			return err
 		}

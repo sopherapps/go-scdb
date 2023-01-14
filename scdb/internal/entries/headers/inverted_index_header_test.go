@@ -10,41 +10,45 @@ import (
 	"testing"
 )
 
-func TestNewDbFileHeader(t *testing.T) {
+func TestNewInvertedIndexHeader(t *testing.T) {
 	blockSize := uint32(os.Getpagesize())
 	type testRecord struct {
 		maxKeys         *uint64
 		redundantBlocks *uint16
-		expected        *DbFileHeader
+		maxIndexKeyLen  *uint32
+		expected        *InvertedIndexHeader
 	}
 	var testMaxKeys uint64 = 24_000_000
 	var testRedundantBlocks uint16 = 5
+	var testMaxIndexKeyLen uint32 = 4
+	expectedDefaultMaxKeys := DefaultMaxKeys * uint64(DefaultMaxIndexKeyLen)
 	testTable := []testRecord{
-		{nil, nil, generateHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize)},
-		{&testMaxKeys, nil, generateHeader(testMaxKeys, DefaultRedundantBlocks, blockSize)},
-		{nil, &testRedundantBlocks, generateHeader(DefaultMaxKeys, testRedundantBlocks, blockSize)},
-		{&testMaxKeys, &testRedundantBlocks, generateHeader(testMaxKeys, testRedundantBlocks, blockSize)},
+		{nil, nil, nil, generateInvertedIndexHeader(expectedDefaultMaxKeys, DefaultRedundantBlocks, blockSize, DefaultMaxIndexKeyLen)},
+		{&testMaxKeys, nil, nil, generateInvertedIndexHeader(testMaxKeys, DefaultRedundantBlocks, blockSize, DefaultMaxIndexKeyLen)},
+		{nil, &testRedundantBlocks, nil, generateInvertedIndexHeader(expectedDefaultMaxKeys, testRedundantBlocks, blockSize, DefaultMaxIndexKeyLen)},
+		{nil, nil, &testMaxIndexKeyLen, generateInvertedIndexHeader(DefaultMaxKeys*uint64(testMaxIndexKeyLen), DefaultRedundantBlocks, blockSize, testMaxIndexKeyLen)},
+		{&testMaxKeys, &testRedundantBlocks, &testMaxIndexKeyLen, generateInvertedIndexHeader(testMaxKeys, testRedundantBlocks, blockSize, testMaxIndexKeyLen)},
 	}
 
 	for _, record := range testTable {
-		got := NewDbFileHeader(record.maxKeys, record.redundantBlocks, &blockSize)
+		got := NewInvertedIndexHeader(record.maxKeys, record.redundantBlocks, &blockSize, record.maxIndexKeyLen)
 		assert.Equal(t, record.expected, got)
 	}
 }
 
-func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
+func TestExtractInvertedIndexHeaderFromByteArray(t *testing.T) {
 	blockSize := uint32(os.Getpagesize())
 	blockSizeAsBytes := internal.Uint32ToByteArray(blockSize)
-	// title: Scdb versn 0.001
+	// title: ScdbIndex v0.001
 	titleBytes := []byte{
-		83, 99, 100, 98, 32, 118, 101, 114, 115, 110, 32, 48, 46, 48, 48, 49,
+		83, 99, 100, 98, 73, 110, 100, 101, 120, 32, 118, 48, 46, 48, 48, 49,
 	}
-	reserveBytes := make([]byte, 70)
+	reserveBytes := make([]byte, 66)
 
-	t.Run("ExtractDbFileHeaderFromByteArrayDoesJustThat", func(t *testing.T) {
+	t.Run("ExtractInvertedIndexHeaderFromByteArrayDoesJustThat", func(t *testing.T) {
 		type testRecord struct {
 			data     []byte
-			expected *DbFileHeader
+			expected *InvertedIndexHeader
 		}
 
 		testData := []testRecord{
@@ -56,8 +60,10 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					/* redundant_blocks 1 */
 					[]byte{0, 1},
+					/* max_index_key_len 3 */
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
-				expected: generateHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize),
+				expected: generateInvertedIndexHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize, 3),
 			},
 			{
 				data: internal.ConcatByteArrays(
@@ -67,8 +73,10 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					/* redundant_blocks 1 */
 					[]byte{0, 1},
+					/* max_index_key_len 9 */
+					[]byte{0, 0, 0, 9},
 					reserveBytes),
-				expected: generateHeader(24_000_000, DefaultRedundantBlocks, blockSize),
+				expected: generateInvertedIndexHeader(24_000_000, DefaultRedundantBlocks, blockSize, 9),
 			},
 			{
 				data: internal.ConcatByteArrays(
@@ -78,8 +86,10 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					/* redundant_blocks 9 */
 					[]byte{0, 9},
+					/* max_index_key_len 3 */
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
-				expected: generateHeader(DefaultMaxKeys, 9, blockSize),
+				expected: generateInvertedIndexHeader(DefaultMaxKeys, 9, blockSize, 3),
 			},
 			{
 				data: internal.ConcatByteArrays(
@@ -89,13 +99,15 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					/* redundant_blocks 5 */
 					[]byte{0, 5},
+					/* max_index_key_len 3 */
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
-				expected: generateHeader(24_000_000, 5, blockSize),
+				expected: generateInvertedIndexHeader(24_000_000, 5, blockSize, 3),
 			},
 		}
 
 		for _, record := range testData {
-			got, err := ExtractDbFileHeaderFromByteArray(record.data)
+			got, err := ExtractInvertedIndexHeaderFromByteArray(record.data)
 			if err != nil {
 				t.Fatalf("error extracting header from byte array: %s", err)
 			}
@@ -104,7 +116,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 		}
 	})
 
-	t.Run("ExtractDbFileHeaderFromByteArrayRaisesEErrOutOfBoundsWhenArrayIsTooShort", func(t *testing.T) {
+	t.Run("ExtractInvertedIndexHeaderFromByteArrayRaisesEErrOutOfBoundsWhenArrayIsTooShort", func(t *testing.T) {
 		type testRecord struct {
 			data     []byte
 			expected *errors.ErrOutOfBounds
@@ -118,6 +130,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					blockSizeAsBytes,
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					[]byte{0, 1},
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
 				errors.NewErrOutOfBounds("header length is 98. expected 100"),
 			},
@@ -128,6 +141,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					blockSizeAsBytes[:3],
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					[]byte{0, 1},
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
 				errors.NewErrOutOfBounds("header length is 99. expected 100"),
 			},
@@ -138,6 +152,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					/* max_keys truncated */
 					[]byte{0, 15, 66, 64},
 					[]byte{0, 9},
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
 				errors.NewErrOutOfBounds("header length is 96. expected 100"),
 			},
@@ -148,6 +163,7 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					/* redundant_blocks truncated */
 					[]byte{5},
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
 				errors.NewErrOutOfBounds("header length is 99. expected 100"),
 			},
@@ -157,36 +173,48 @@ func TestExtractDbFileHeaderFromByteArray(t *testing.T) {
 					blockSizeAsBytes,
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					[]byte{0, 5},
+					/* maxIndexKeyLen truncated */
+					[]byte{0, 0, 3},
+					reserveBytes),
+				errors.NewErrOutOfBounds("header length is 99. expected 100"),
+			},
+			{
+				internal.ConcatByteArrays(
+					titleBytes,
+					blockSizeAsBytes,
+					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
+					[]byte{0, 5},
+					[]byte{0, 0, 0, 3},
 					// reserve bytes truncated
 					reserveBytes[:60]),
-				errors.NewErrOutOfBounds("header length is 90. expected 100"),
+				errors.NewErrOutOfBounds("header length is 94. expected 100"),
 			},
 		}
 
 		for _, record := range testData {
-			_, err := ExtractDbFileHeaderFromByteArray(record.data)
+			_, err := ExtractInvertedIndexHeaderFromByteArray(record.data)
 			assert.Equal(t, record.expected, err)
 		}
 	})
 }
 
-func TestExtractDbFileHeaderFromFile(t *testing.T) {
+func TestExtractInvertedIndexHeaderFromFile(t *testing.T) {
 	filePath := "testdb.scdb"
 	blockSize := uint32(os.Getpagesize())
 	blockSizeAsBytes := internal.Uint32ToByteArray(blockSize)
-	// title: Scdb versn 0.001
+	// title: ScdbIndex v0.001
 	titleBytes := []byte{
-		83, 99, 100, 98, 32, 118, 101, 114, 115, 110, 32, 48, 46, 48, 48, 49,
+		83, 99, 100, 98, 73, 110, 100, 101, 120, 32, 118, 48, 46, 48, 48, 49,
 	}
-	reserveBytes := make([]byte, 70)
+	reserveBytes := make([]byte, 66)
 
-	t.Run("ExtractDbFileHeaderFromFileDoesJustThat", func(t *testing.T) {
+	t.Run("ExtractInvertedIndexHeaderFromFileDoesJustThat", func(t *testing.T) {
 		defer func() {
 			_ = os.Remove(filePath)
 		}()
 		type testRecord struct {
 			data     []byte
-			expected *DbFileHeader
+			expected *InvertedIndexHeader
 		}
 
 		testData := []testRecord{
@@ -198,8 +226,10 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					/* redundant_blocks 1 */
 					[]byte{0, 1},
+					/* max_index_key_len 3 */
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
-				expected: generateHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize),
+				expected: generateInvertedIndexHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize, 3),
 			},
 			{
 				data: internal.ConcatByteArrays(
@@ -209,8 +239,10 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					/* redundant_blocks 1 */
 					[]byte{0, 1},
+					/* max_index_key_len 3 */
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
-				expected: generateHeader(24_000_000, DefaultRedundantBlocks, blockSize),
+				expected: generateInvertedIndexHeader(24_000_000, DefaultRedundantBlocks, blockSize, 3),
 			},
 			{
 				data: internal.ConcatByteArrays(
@@ -220,8 +252,10 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					/* redundant_blocks 9 */
 					[]byte{0, 9},
+					/* max_index_key_len 3 */
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
-				expected: generateHeader(DefaultMaxKeys, 9, blockSize),
+				expected: generateInvertedIndexHeader(DefaultMaxKeys, 9, blockSize, 3),
 			},
 			{
 				data: internal.ConcatByteArrays(
@@ -231,8 +265,10 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					/* redundant_blocks 5 */
 					[]byte{0, 5},
+					/* max_index_key_len 8 */
+					[]byte{0, 0, 0, 8},
 					reserveBytes),
-				expected: generateHeader(24_000_000, 5, blockSize),
+				expected: generateInvertedIndexHeader(24_000_000, 5, blockSize, 8),
 			},
 		}
 
@@ -242,7 +278,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 				t.Fatalf("error generating file with data: %s", err)
 			}
 
-			got, err := ExtractDbFileHeaderFromFile(file)
+			got, err := ExtractInvertedIndexHeaderFromFile(file)
 			if err != nil {
 				t.Fatalf("error extracting header from file: %s", err)
 			}
@@ -252,7 +288,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 		}
 	})
 
-	t.Run("ExtractDbFileHeaderFromFileRaisesEErrOutOfBoundsWhenFileContentIsTooShort", func(t *testing.T) {
+	t.Run("ExtractInvertedIndexHeaderFromFileRaisesEErrOutOfBoundsWhenFileContentIsTooShort", func(t *testing.T) {
 		defer func() {
 			_ = os.Remove(filePath)
 		}()
@@ -269,6 +305,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					blockSizeAsBytes,
 					[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 					[]byte{0, 1},
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
 				errors.NewErrOutOfBounds("header length is 98. expected 100"),
 			},
@@ -279,6 +316,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					blockSizeAsBytes[:3],
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					[]byte{0, 1},
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
 				errors.NewErrOutOfBounds("header length is 99. expected 100"),
 			},
@@ -289,6 +327,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					/* max_keys truncated */
 					[]byte{0, 15, 66, 64},
 					[]byte{0, 9},
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
 				errors.NewErrOutOfBounds("header length is 96. expected 100"),
 			},
@@ -299,6 +338,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					/* redundant_blocks truncated */
 					[]byte{5},
+					[]byte{0, 0, 0, 3},
 					reserveBytes),
 				errors.NewErrOutOfBounds("header length is 99. expected 100"),
 			},
@@ -308,9 +348,21 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 					blockSizeAsBytes,
 					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 					[]byte{0, 5},
+					/* maxIndexKeyLen truncated */
+					[]byte{0, 0, 3},
+					reserveBytes),
+				errors.NewErrOutOfBounds("header length is 99. expected 100"),
+			},
+			{
+				internal.ConcatByteArrays(
+					titleBytes,
+					blockSizeAsBytes,
+					[]byte{0, 0, 0, 0, 1, 110, 54, 0},
+					[]byte{0, 5},
+					[]byte{0, 0, 0, 3},
 					// reserve bytes truncated
 					reserveBytes[:60]),
-				errors.NewErrOutOfBounds("header length is 90. expected 100"),
+				errors.NewErrOutOfBounds("header length is 94. expected 100"),
 			},
 		}
 
@@ -320,7 +372,7 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 				t.Fatalf("error generating file with data: %s", err)
 			}
 
-			_, err = ExtractDbFileHeaderFromFile(file)
+			_, err = ExtractInvertedIndexHeaderFromFile(file)
 			_ = file.Close()
 			assert.Equal(t, record.expected, err)
 
@@ -333,18 +385,20 @@ func TestExtractDbFileHeaderFromFile(t *testing.T) {
 
 }
 
-func TestDbFileHeader_AsBytes(t *testing.T) {
+func TestInvertedIndexHeader_AsBytes(t *testing.T) {
 	blockSize := uint32(os.Getpagesize())
 	blockSizeAsBytes := internal.Uint32ToByteArray(blockSize)
-	// title: Scdb versn 0.001
+	// title: ScdbIndex v0.001
 	titleBytes := []byte{
-		83, 99, 100, 98, 32, 118, 101, 114, 115, 110, 32, 48, 46, 48, 48, 49,
+		83, 99, 100, 98, 73, 110, 100, 101, 120, 32, 118, 48, 46, 48, 48, 49,
 	}
-	reserveBytes := make([]byte, 70)
+	reserveBytes := make([]byte, 66)
 	type testRecord struct {
 		expected []byte
-		header   *DbFileHeader
+		header   *InvertedIndexHeader
 	}
+
+	testMaxIndexKeyLen := uint32(9)
 
 	testData := []testRecord{
 		{
@@ -355,8 +409,10 @@ func TestDbFileHeader_AsBytes(t *testing.T) {
 				[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 				/* redundant_blocks 1 */
 				[]byte{0, 1},
+				/* max_index_key_len 3 */
+				[]byte{0, 0, 0, 3},
 				reserveBytes),
-			header: generateHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize),
+			header: generateInvertedIndexHeader(DefaultMaxKeys, DefaultRedundantBlocks, blockSize, 3),
 		},
 		{
 			expected: internal.ConcatByteArrays(
@@ -366,8 +422,10 @@ func TestDbFileHeader_AsBytes(t *testing.T) {
 				[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 				/* redundant_blocks 1 */
 				[]byte{0, 1},
+				/* max_index_key_len 3 */
+				[]byte{0, 0, 0, 3},
 				reserveBytes),
-			header: generateHeader(24_000_000, DefaultRedundantBlocks, blockSize),
+			header: generateInvertedIndexHeader(24_000_000, DefaultRedundantBlocks, blockSize, 3),
 		},
 		{
 			expected: internal.ConcatByteArrays(
@@ -377,8 +435,10 @@ func TestDbFileHeader_AsBytes(t *testing.T) {
 				[]byte{0, 0, 0, 0, 0, 15, 66, 64},
 				/* redundant_blocks 9 */
 				[]byte{0, 9},
+				/* max_index_key_len 3 */
+				[]byte{0, 0, 0, 3},
 				reserveBytes),
-			header: generateHeader(DefaultMaxKeys, 9, blockSize),
+			header: generateInvertedIndexHeader(DefaultMaxKeys, 9, blockSize, 3),
 		},
 		{
 			expected: internal.ConcatByteArrays(
@@ -388,8 +448,36 @@ func TestDbFileHeader_AsBytes(t *testing.T) {
 				[]byte{0, 0, 0, 0, 1, 110, 54, 0},
 				/* redundant_blocks 5 */
 				[]byte{0, 5},
+				/* max_index_key_len 9 */
+				[]byte{0, 0, 0, 9},
 				reserveBytes),
-			header: generateHeader(24_000_000, 5, blockSize),
+			header: generateInvertedIndexHeader(24_000_000, 5, blockSize, 9),
+		},
+		{
+			expected: internal.ConcatByteArrays(
+				titleBytes,
+				blockSizeAsBytes,
+				/* max_keys 3_000_000 i.e. maxIndexKeyLen * DefaultMaxKeys*/
+				[]byte{0, 0, 0, 0, 0, 45, 198, 192},
+				/* redundant_blocks 1 */
+				[]byte{0, 1},
+				/* max_index_key_len 3 */
+				[]byte{0, 0, 0, 3},
+				reserveBytes),
+			header: NewInvertedIndexHeader(nil, nil, nil, nil),
+		},
+		{
+			expected: internal.ConcatByteArrays(
+				titleBytes,
+				blockSizeAsBytes,
+				/* max_keys 9_000_000 i.e. maxIndexKeyLen * DefaultMaxKeys*/
+				[]byte{0, 0, 0, 0, 0, 137, 84, 64},
+				/* redundant_blocks 1 */
+				[]byte{0, 1},
+				/* max_index_key_len 9 */
+				[]byte{0, 0, 0, 9},
+				reserveBytes),
+			header: NewInvertedIndexHeader(nil, nil, nil, &testMaxIndexKeyLen),
 		},
 	}
 
@@ -399,8 +487,8 @@ func TestDbFileHeader_AsBytes(t *testing.T) {
 	}
 }
 
-func TestDbFileHeader_GetIndexOffset(t *testing.T) {
-	dbHeader := NewDbFileHeader(nil, nil, nil)
+func TestInvertedIndexHeader_GetIndexOffset(t *testing.T) {
+	dbHeader := NewInvertedIndexHeader(nil, nil, nil, nil)
 	offset := GetIndexOffset(dbHeader, []byte("foo"))
 	block1Start := HeaderSizeInBytes
 	block1End := dbHeader.NetBlockSize + block1Start
@@ -408,8 +496,8 @@ func TestDbFileHeader_GetIndexOffset(t *testing.T) {
 	assert.Less(t, offset, block1End)
 }
 
-func TestDbFileHeader_GetIndexOffsetInNthBlock(t *testing.T) {
-	dbHeader := NewDbFileHeader(nil, nil, nil)
+func TestInvertedIndexHeader_GetIndexOffsetInNthBlock(t *testing.T) {
+	dbHeader := NewInvertedIndexHeader(nil, nil, nil, nil)
 	initialOffset := GetIndexOffset(dbHeader, []byte("foo"))
 	numberOfBlocks := dbHeader.NumberOfIndexBlocks
 
@@ -436,22 +524,23 @@ func TestDbFileHeader_GetIndexOffsetInNthBlock(t *testing.T) {
 
 }
 
-// generateHeader generates a DbFileHeader basing on the inputs supplied.
+// generateInvertedIndexHeader generates a InvertedIndexHeader basing on the inputs supplied.
 // This is just a helper for tests
-func generateHeader(maxKeys uint64, redundantBlocks uint16, blockSize uint32) *DbFileHeader {
+func generateInvertedIndexHeader(maxKeys uint64, redundantBlocks uint16, blockSize uint32, maxIndexKeyLen uint32) *InvertedIndexHeader {
 	itemsPerIndexBlock := uint64(math.Floor(float64(blockSize) / float64(IndexEntrySizeInBytes)))
 	netBlockSize := itemsPerIndexBlock * IndexEntrySizeInBytes
 	numberOfIndexBlocks := uint64(math.Ceil(float64(maxKeys)/float64(itemsPerIndexBlock))) + uint64(redundantBlocks)
-	keyValuesStartPoint := HeaderSizeInBytes + (netBlockSize * numberOfIndexBlocks)
+	valuesStartPoint := HeaderSizeInBytes + (netBlockSize * numberOfIndexBlocks)
 
-	return &DbFileHeader{
-		Title:               []byte("Scdb versn 0.001"),
+	return &InvertedIndexHeader{
+		Title:               []byte("ScdbIndex v0.001"),
 		BlockSize:           blockSize,
 		MaxKeys:             maxKeys,
 		RedundantBlocks:     redundantBlocks,
 		ItemsPerIndexBlock:  itemsPerIndexBlock,
 		NumberOfIndexBlocks: numberOfIndexBlocks,
-		KeyValuesStartPoint: keyValuesStartPoint,
+		ValuesStartPoint:    valuesStartPoint,
 		NetBlockSize:        netBlockSize,
+		MaxIndexKeyLen:      maxIndexKeyLen,
 	}
 }

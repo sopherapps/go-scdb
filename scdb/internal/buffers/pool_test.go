@@ -1001,7 +1001,7 @@ func TestBufferPool_ReadIndex(t *testing.T) {
 
 		insertKeyValueEntry(t, pool, header, kv)
 
-		indexAddr := header.GetIndexOffset(kv.Key)
+		indexAddr := headers.GetIndexOffset(header, kv.Key)
 		kvAddr := getKvAddress(t, pool, header, kv)
 
 		got, err := pool.ReadIndex(indexAddr)
@@ -1109,7 +1109,7 @@ func writeToFile(t *testing.T, filePath string, offset int64, data []byte) {
 
 // insertKeyValueEntry inserts a key value entry into the pool, updating the index also
 func insertKeyValueEntry(t *testing.T, pool *BufferPool, header *headers.DbFileHeader, kv *values.KeyValueEntry) {
-	idxAddr := header.GetIndexOffset(kv.Key)
+	idxAddr := headers.GetIndexOffset(header, kv.Key)
 	kvAddr, err := pool.Append(kv.AsBytes())
 	if err != nil {
 		t.Fatalf("error appending kv: %s", err)
@@ -1124,7 +1124,7 @@ func insertKeyValueEntry(t *testing.T, pool *BufferPool, header *headers.DbFileH
 // getKvAddress returns the address for the given key value entry within the buffer pool
 func getKvAddress(t *testing.T, pool *BufferPool, header *headers.DbFileHeader, kv *values.KeyValueEntry) uint64 {
 	kvAddr := make([]byte, headers.IndexEntrySizeInBytes)
-	indexAddr := int64(header.GetIndexOffset(kv.Key))
+	indexAddr := int64(headers.GetIndexOffset(header, kv.Key))
 
 	_, err := pool.File.ReadAt(kvAddr, indexAddr)
 	if err != nil {
@@ -1141,7 +1141,7 @@ func getKvAddress(t *testing.T, pool *BufferPool, header *headers.DbFileHeader, 
 
 // deleteKeyValue deletes a given key value in the given pool
 func deleteKeyValue(t *testing.T, pool *BufferPool, header *headers.DbFileHeader, kv *values.KeyValueEntry) {
-	indexAddr := header.GetIndexOffset(kv.Key)
+	indexAddr := headers.GetIndexOffset(header, kv.Key)
 	err := pool.UpdateIndex(indexAddr, internal.Uint64ToByteArray(0))
 	if err != nil {
 		t.Fatalf("error updating index: %s", err)
@@ -1151,7 +1151,7 @@ func deleteKeyValue(t *testing.T, pool *BufferPool, header *headers.DbFileHeader
 // keyValueExists checks whether a given key value entry exists in the data array got from the file
 func keyValueExists(t *testing.T, data []byte, header *headers.DbFileHeader, kv *values.KeyValueEntry) bool {
 	idxItemSize := headers.IndexEntrySizeInBytes
-	idxAddr := header.GetIndexOffset(kv.Key)
+	idxAddr := headers.GetIndexOffset(header, kv.Key)
 	kvAddrByteArray := data[idxAddr : idxAddr+idxItemSize]
 	zero := make([]byte, idxItemSize)
 

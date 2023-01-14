@@ -4,14 +4,8 @@ import (
 	"fmt"
 	"github.com/sopherapps/go-scdb/scdb/errors"
 	"github.com/sopherapps/go-scdb/scdb/internal"
-	"math"
 	"os"
 )
-
-const IndexEntrySizeInBytes uint64 = 8
-const HeaderSizeInBytes uint64 = 100
-const DefaultMaxKeys uint64 = 1_000_000
-const DefaultRedundantBlocks uint16 = 1
 
 type DbFileHeader struct {
 	Title               []byte
@@ -48,7 +42,7 @@ func NewDbFileHeader(maxKeys *uint64, redundantBlocks *uint16, blockSize *uint32
 		header.BlockSize = uint32(os.Getpagesize())
 	}
 
-	header.updateDerivedProps()
+	updateDerivedProps(&header)
 
 	return &header
 }
@@ -81,36 +75,21 @@ func ExtractDbFileHeaderFromByteArray(data []byte) (*DbFileHeader, error) {
 		RedundantBlocks: redundantBlocks,
 	}
 
-	header.updateDerivedProps()
+	updateDerivedProps(&header)
 
 	return &header, nil
 }
 
 // ExtractDbFileHeaderFromFile extracts the header from a database file
 func ExtractDbFileHeaderFromFile(file *os.File) (*DbFileHeader, error) {
-	buf := make([]byte, HeaderSizeInBytes)
-	n, err := file.ReadAt(buf, 0)
-	if n < int(HeaderSizeInBytes) {
-		return nil, errors.NewErrOutOfBounds(fmt.Sprintf("header length is %d. expected %d", n, HeaderSizeInBytes))
-	}
-
+	data, err := readHeaderFile(file)
 	if err != nil {
 		return nil, err
 	}
 
-	return ExtractDbFileHeaderFromByteArray(buf)
+	return ExtractDbFileHeaderFromByteArray(data)
 }
 
-// updateDerivedProps computes the properties that depend on the user-defined/default properties and update them
-// on self
-func (h *DbFileHeader) updateDerivedProps() {
-	h.ItemsPerIndexBlock = uint64(math.Floor(float64(h.BlockSize) / float64(IndexEntrySizeInBytes)))
-	h.NumberOfIndexBlocks = uint64(math.Ceil(float64(h.MaxKeys)/float64(h.ItemsPerIndexBlock))) + uint64(h.RedundantBlocks)
-	h.NetBlockSize = h.ItemsPerIndexBlock * IndexEntrySizeInBytes
-	h.KeyValuesStartPoint = HeaderSizeInBytes + (h.NetBlockSize * h.NumberOfIndexBlocks)
-}
-
-// AsBytes retrieves the byte array that represents the header.
 func (h *DbFileHeader) AsBytes() []byte {
 	return internal.ConcatByteArrays(
 		h.Title,
@@ -121,20 +100,42 @@ func (h *DbFileHeader) AsBytes() []byte {
 	)
 }
 
-// GetIndexOffset computes the offset for the given key in the first index block.
-// It uses the meta data in this header
-// i.e. number of items per block and the `IndexEntrySizeInBytes`
-func (h *DbFileHeader) GetIndexOffset(key []byte) uint64 {
-	hash := internal.GetHash(key, h.ItemsPerIndexBlock)
-	return HeaderSizeInBytes + (hash * IndexEntrySizeInBytes)
+func (h *DbFileHeader) GetItemsPerIndexBlock() uint64 {
+	return h.ItemsPerIndexBlock
 }
 
-// GetIndexOffsetInNthBlock returns the index offset for the nth index block if `initialOffset` is the offset
-// in the top most index block `n` starts at zero where zero is the top most index block
-func (h *DbFileHeader) GetIndexOffsetInNthBlock(initialOffset uint64, n uint64) (uint64, error) {
-	if n >= h.NumberOfIndexBlocks {
-		return 0, errors.NewErrOutOfBounds(fmt.Sprintf("n %d is out of bounds", n))
-	}
-	num := initialOffset + (h.NetBlockSize * n)
-	return num, nil
+func (h *DbFileHeader) GetNumberOfIndexBlocks() uint64 {
+	return h.NumberOfIndexBlocks
+}
+
+func (h *DbFileHeader) GetNetBlockSize() uint64 {
+	return h.NetBlockSize
+}
+
+func (h *DbFileHeader) GetBlockSize() uint32 {
+	return h.BlockSize
+}
+
+func (h *DbFileHeader) GetMaxKeys() uint64 {
+	return h.MaxKeys
+}
+
+func (h *DbFileHeader) GetRedundantBlocks() uint16 {
+	return h.RedundantBlocks
+}
+
+func (h *DbFileHeader) SetItemsPerIndexBlock(u uint64) {
+	h.ItemsPerIndexBlock = u
+}
+
+func (h *DbFileHeader) SetNumberOfIndexBlocks(u uint64) {
+	h.NumberOfIndexBlocks = u
+}
+
+func (h *DbFileHeader) SetNetBlockSize(u uint64) {
+	h.NetBlockSize = u
+}
+
+func (h *DbFileHeader) SetValuesStartPoint(u uint64) {
+	h.KeyValuesStartPoint = u
 }

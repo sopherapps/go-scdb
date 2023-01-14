@@ -82,7 +82,7 @@ func NewBufferPool(capacity *uint64, filePath string, maxKeys *uint64, redundant
 	var header *headers.DbFileHeader
 	if !dbFileExists {
 		header = headers.NewDbFileHeader(maxKeys, redundantBlocks, &bufSize)
-		_, err = initializeDbFile(file, header)
+		_, err = headers.InitializeFile(file, header)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +188,7 @@ func (bp *BufferPool) UpdateIndex(addr uint64, data []byte) error {
 func (bp *BufferPool) ClearFile() error {
 	bufSize := uint32(bp.bufferSize)
 	header := headers.NewDbFileHeader(&bp.maxKeys, &bp.redundantBlocks, &bufSize)
-	fileSize, err := initializeDbFile(bp.File, header)
+	fileSize, err := headers.InitializeFile(bp.File, header)
 	if err != nil {
 		return err
 	}
@@ -485,7 +485,58 @@ func (bp *BufferPool) ReadIndex(addr uint64) ([]byte, error) {
 
 // GetManyKeyValues gets all the key-value pairs that correspond to the given list of key-value addresses
 func (bp *BufferPool) GetManyKeyValues(addrs []uint64) ([]KeyValuePair, error) {
-	return nil, nil
+	results := make([]KeyValuePair, 0, len(addrs))
+
+	for _, addr := range addrs {
+		addr := int64(addr)
+		size, err := bp.readKvSize(addr)
+		if err != nil {
+			return nil, err
+		}
+
+		buf, err := bp.readKvBytes(addr, size)
+		if err != nil {
+			return nil, err
+		}
+
+		entry, err := values.ExtractKeyValueEntryFromByteArray(buf, 0)
+		if err != nil {
+			return nil, err
+		}
+
+		if !entry.IsDeleted && entry.IsExpired() {
+			results = append(results, KeyValuePair{
+				K: entry.Key,
+				V: entry.Value,
+			})
+		}
+	}
+
+	return results, nil
+}
+
+// readKvBytes reads the key-value byte array directly from file given address and size
+func (bp *BufferPool) readKvBytes(addr int64, size uint32) ([]byte, error) {
+	buf := make([]byte, size)
+
+	_, err := bp.File.ReadAt(buf, addr)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+
+	return buf, nil
+}
+
+// readSize reads the size of a key-value entry directly from file
+func (bp *BufferPool) readKvSize(addr int64) (uint32, error) {
+	buf := make([]byte, 4)
+
+	_, err := bp.File.ReadAt(buf, addr)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return 0, err
+	}
+
+	return internal.Uint32FromByteArray(buf)
 }
 
 // readIndexBlock returns the next index block
@@ -563,33 +614,6 @@ func getFileSize(file *os.File) (uint64, error) {
 func getIndexCapacity(numOfIndexBlocks uint64, totalCapacity uint64) uint64 {
 	idxCap := math.Floor(2.0 * float64(totalCapacity) / 3.0)
 	return uint64(math.Max(1, math.Min(idxCap, float64(numOfIndexBlocks))))
-}
-
-// initializeDbFile initializes the database file, giving it the header and the index place holders
-// and truncating it. It returns the new file size
-func initializeDbFile(file *os.File, header *headers.DbFileHeader) (int64, error) {
-	headerBytes := header.AsBytes()
-	headerLength := int64(len(headerBytes))
-	finalSize := headerLength + int64(header.NumberOfIndexBlocks*header.NetBlockSize)
-
-	// First shrink file to zero, to delete all data
-	err := file.Truncate(0)
-	if err != nil {
-		return 0, err
-	}
-
-	// The expand the file again
-	err = file.Truncate(finalSize)
-	if err != nil {
-		return 0, err
-	}
-
-	_, err = file.WriteAt(headerBytes, 0)
-	if err != nil {
-		return 0, err
-	}
-
-	return finalSize, nil
 }
 
 // extractKeyAsByteArrayFromFile extracts the byte array for the key from a given file
