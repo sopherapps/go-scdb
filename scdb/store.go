@@ -244,12 +244,6 @@ func (s *Store) Delete(k []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	done := make(chan error)
-	// Update the search index in a separate goroutine.
-	go func(ch chan<- error) {
-		ch <- s.searchIndex.Remove(k)
-	}(done)
-
 	initialIdxOffset := headers.GetIndexOffset(s.header, k)
 
 	for idxBlock := uint64(0); idxBlock < s.header.NumberOfIndexBlocks; idxBlock++ {
@@ -284,8 +278,7 @@ func (s *Store) Delete(k []byte) error {
 	}
 	// if it is not found, no error is thrown
 
-	err := <-done // wait for search index to complete
-	return err
+	return s.searchIndex.Remove(k)
 }
 
 // Clear removes all data in the store
@@ -293,19 +286,12 @@ func (s *Store) Clear() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	done := make(chan error)
-	// Update the search index in a separate goroutine.
-	go func(ch chan<- error) {
-		ch <- s.searchIndex.Clear()
-	}(done)
-
 	err := s.bufferPool.ClearFile()
 	if err != nil {
 		return err
 	}
 
-	err = <-done // wait for search index goroutine to end
-	return err
+	return s.searchIndex.Clear()
 }
 
 // Compact manually removes dangling key-value pairs in the database file
