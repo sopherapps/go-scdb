@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
-- Changed the `scdb::New()` signature to include `maxIndexKeyLen` option.
+- Changed the `scdb.New()` signature to include `maxIndexKeyLen` option.
 
 ### Fixed
 
