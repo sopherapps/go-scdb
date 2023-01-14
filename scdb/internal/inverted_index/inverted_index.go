@@ -1,6 +1,7 @@
 package inverted_index
 
 import (
+	"github.com/sopherapps/go-scdb/scdb/internal"
 	"github.com/sopherapps/go-scdb/scdb/internal/entries/headers"
 	"os"
 )
@@ -20,7 +21,52 @@ type InvertedIndex struct {
 // Since we each db key will be represented in the index a number of `max_index_key_len` times
 // for example the key `food` must have the following index keys: `f`, `fo`, `foo`, `food`.
 func NewInvertedIndex(filePath string, maxIndexKeyLen *uint32, dbMaxKeys *uint64, dbRedundantBlocks *uint16) (*InvertedIndex, error) {
-	return nil, nil
+	blockSize := uint32(os.Getpagesize())
+
+	dbFileExists, err := internal.PathExists(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	fileOpenFlag := os.O_RDWR
+	if !dbFileExists {
+		fileOpenFlag = fileOpenFlag | os.O_CREATE
+	}
+
+	file, err := os.OpenFile(filePath, fileOpenFlag, 0666)
+	if err != nil {
+		return nil, err
+	}
+
+	var header *headers.InvertedIndexHeader
+	if !dbFileExists {
+		header = headers.NewInvertedIndexHeader(dbMaxKeys, dbRedundantBlocks, &blockSize, maxIndexKeyLen)
+		_, err = headers.InitializeFile(file, header)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		header, err = headers.ExtractInvertedIndexHeaderFromFile(file)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	fileSize, err := internal.GetFileSize(file)
+	if err != nil {
+		return nil, err
+	}
+
+	idx := InvertedIndex{
+		File:             file,
+		FilePath:         filePath,
+		MaxIndexKeyLen:   header.MaxIndexKeyLen,
+		ValuesStartPoint: header.ValuesStartPoint,
+		FileSize:         fileSize,
+		header:           header,
+	}
+
+	return &idx, nil
 }
 
 // Add adds a key's kv address in the corresponding prefixes' lists to update the inverted index

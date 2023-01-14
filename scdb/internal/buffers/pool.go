@@ -65,7 +65,7 @@ func NewBufferPool(capacity *uint64, filePath string, maxKeys *uint64, redundant
 		poolCap = DefaultPoolCapacity
 	}
 
-	dbFileExists, err := pathExists(filePath)
+	dbFileExists, err := internal.PathExists(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func NewBufferPool(capacity *uint64, filePath string, maxKeys *uint64, redundant
 		}
 	}
 
-	fileSize, err := getFileSize(file)
+	fileSize, err := internal.GetFileSize(file)
 	if err != nil {
 		return nil, err
 	}
@@ -589,25 +589,6 @@ func (bp *BufferPool) Eq(other *BufferPool) bool {
 	}
 
 	return true
-}
-
-// pathExists checks to see if a given path exists
-func pathExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-
-	return err == nil, err
-}
-
-// getFileSize computes the file size of the given file
-func getFileSize(file *os.File) (uint64, error) {
-	fileStat, err := file.Stat()
-	if err != nil {
-		return 0, err
-	}
-	return uint64(fileStat.Size()), nil
 }
 
 // getIndexCapacity computes the capacity (i.e. number of buffers) of the buffers to be set aside for index buffers

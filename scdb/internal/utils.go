@@ -134,3 +134,22 @@ func ValidateBounds(actualLower uint64, actualUpper uint64, expectedLower uint64
 	}
 	return nil
 }
+
+// PathExists checks to see if a given path exists
+func PathExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+
+	return err == nil, err
+}
+
+// GetFileSize computes the file size of the given file
+func GetFileSize(file *os.File) (uint64, error) {
+	fileStat, err := file.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return uint64(fileStat.Size()), nil
+}
