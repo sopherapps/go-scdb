@@ -7,6 +7,7 @@ import (
 	"github.com/sopherapps/go-scdb/scdb/internal"
 	"github.com/sopherapps/go-scdb/scdb/internal/entries/headers"
 	"github.com/sopherapps/go-scdb/scdb/internal/entries/values"
+	"github.com/sopherapps/go-scdb/scdb/internal/inverted_index"
 	"io"
 	"math"
 	"os"
@@ -200,7 +201,7 @@ func (bp *BufferPool) ClearFile() error {
 
 // CompactFile removes any deleted or expired entries from the file. It must first lock the buffer and the file.
 // In order to be more efficient, it creates a new file, copying only that data which is not deleted or expired
-func (bp *BufferPool) CompactFile(searchIndex *internal.InvertedIndex) error {
+func (bp *BufferPool) CompactFile(searchIndex *inverted_index.InvertedIndex) error {
 	folder := filepath.Dir(bp.FilePath)
 	newFilePath := filepath.Join(folder, "tmp__compact.scdb")
 	newFile, err := os.OpenFile(newFilePath, os.O_RDWR|os.O_CREATE, 0666)

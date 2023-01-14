@@ -1,9 +1,17 @@
-package internal
+package inverted_index
 
-import "os"
+import (
+	"github.com/sopherapps/go-scdb/scdb/internal/entries/headers"
+	"os"
+)
 
 type InvertedIndex struct {
-	File *os.File
+	File             *os.File
+	FilePath         string
+	MaxIndexKeyLen   uint32
+	ValuesStartPoint uint64
+	FileSize         uint64
+	header           *headers.InvertedIndexHeader
 }
 
 // NewInvertedIndex initializes a new Inverted Index
@@ -42,12 +50,22 @@ func (idx *InvertedIndex) Remove(key []byte) error {
 // Clear clears all the data in the search index, except the header, and its original
 // variables
 func (idx *InvertedIndex) Clear() error {
+	header := headers.NewInvertedIndexHeader(&idx.header.MaxKeys, &idx.header.RedundantBlocks, &idx.header.BlockSize, &idx.header.MaxIndexKeyLen)
+	fileSize, err := headers.InitializeFile(idx.File, header)
+	if err != nil {
+		return err
+	}
+
+	idx.FileSize = uint64(fileSize)
 	return nil
 }
 
 // Eq checks if the other InvertedIndex instance equals the current inverted index
 func (idx *InvertedIndex) Eq(other *InvertedIndex) bool {
-	return false
+	return idx.ValuesStartPoint == other.ValuesStartPoint &&
+		idx.MaxIndexKeyLen == other.MaxIndexKeyLen &&
+		idx.FilePath == other.FilePath &&
+		idx.FileSize == other.FileSize
 }
 
 // Close closes the buffer pool, freeing up any resources

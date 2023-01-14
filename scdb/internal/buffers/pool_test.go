@@ -5,6 +5,7 @@ import (
 	"github.com/sopherapps/go-scdb/scdb/internal"
 	"github.com/sopherapps/go-scdb/scdb/internal/entries/headers"
 	"github.com/sopherapps/go-scdb/scdb/internal/entries/values"
+	"github.com/sopherapps/go-scdb/scdb/internal/inverted_index"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
@@ -476,7 +477,7 @@ func TestBufferPool_CompactFile(t *testing.T) {
 
 	initialFileSize := getActualFileSize(t, fileName)
 
-	searchIndex, err := internal.NewInvertedIndex(indexFileName, nil, nil, nil)
+	searchIndex, err := inverted_index.NewInvertedIndex(indexFileName, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("error creating a search index: %s", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/sopherapps/go-scdb/scdb/internal/buffers"
 	"github.com/sopherapps/go-scdb/scdb/internal/entries/headers"
 	"github.com/sopherapps/go-scdb/scdb/internal/entries/values"
+	"github.com/sopherapps/go-scdb/scdb/internal/inverted_index"
 	"os"
 	"path/filepath"
 	"sync"
@@ -29,7 +30,7 @@ var zeroU64 = internal.Uint64ToByteArray(0)
 type Store struct {
 	bufferPool  *buffers.BufferPool
 	header      *headers.DbFileHeader
-	searchIndex *internal.InvertedIndex
+	searchIndex *inverted_index.InvertedIndex
 	closeCh     chan bool
 	mu          sync.Mutex
 	isClosed    bool
@@ -88,7 +89,7 @@ func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *ui
 	}
 
 	searchIndexFilePath := filepath.Join(path, defaultSearchIndexFile)
-	searchIndex, err := internal.NewInvertedIndex(searchIndexFilePath, maxIndexKeyLen, maxKeys, redundantBlocks)
+	searchIndex, err := inverted_index.NewInvertedIndex(searchIndexFilePath, maxIndexKeyLen, maxKeys, redundantBlocks)
 	if err != nil {
 		return nil, err
 	}
