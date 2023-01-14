@@ -21,13 +21,15 @@ func main() {
 	var redundantBlocks uint16 = 1
 	var poolCapacity uint64 = 10
 	var compactionInterval uint32 = 1_800
+	var maxIndexKeyLen uint32 = 3
 
 	store, err := scdb.New(
 		"db",
 		&maxKeys,
 		&redundantBlocks,
 		&poolCapacity,
-		&compactionInterval)
+		&compactionInterval,
+		&maxIndexKeyLen)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
@@ -76,6 +78,20 @@ func main() {
 
 		fmt.Printf("Key: %s, Value: %s", k, value)
 	}
+
+	// searching: without pagination
+	kvs, err := store.Search([]byte("h"), 0, 0)
+	if err != nil {
+		log.Fatalf("error searching 'h': %s", err)
+	}
+	fmt.Printf("\nno pagination: %v", kvs)
+
+	// searching with pagination: get last two
+	kvs, err = store.Search([]byte("h"), 2, 2)
+	if err != nil {
+		log.Fatalf("error searching (paginated) 'h': %s", err)
+	}
+	fmt.Printf("\nskip 2, limit 2: %v", kvs)
 
 	// deleting
 	for k := range records {
