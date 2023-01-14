@@ -166,7 +166,7 @@ func TestStore_Search(t *testing.T) {
 			{[]byte("bandana"), 0, 0, []buffers.KeyValuePair{}},
 			{[]byte("bare"), 0, 0, []buffers.KeyValuePair{}},
 		}
-		recordsToExpire := []testRecord{RECORDS[0], RECORDS[2], RECORDS[3]}
+		recordsToExpire := []testRecord{SEARCH_RECORDS[0], SEARCH_RECORDS[2], SEARCH_RECORDS[3]}
 		ttl := uint64(1)
 		insertRecords(t, store, SEARCH_RECORDS, nil)
 		insertRecords(t, store, recordsToExpire, &ttl)

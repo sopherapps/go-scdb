@@ -71,6 +71,11 @@ type Store struct {
 //     A new key-value pair is created and the old one is left unindexed.
 //     Compaction is important because it reclaims this space and reduces the size
 //     of the database file.
+//
+//   - `maxIndexKeyLen` - default 3:
+//     The maximum number of characters in each key in the search inverted index
+//     The inverted index is used for full-text search of keys to get all key-values
+//     whose keys start with a given byte array.
 func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *uint64, compactionInterval *uint32, maxIndexKeyLen *uint32) (*Store, error) {
 	err := os.MkdirAll(path, 0755)
 	if err != nil {
