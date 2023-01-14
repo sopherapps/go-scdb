@@ -83,7 +83,7 @@ func (b *Buffer) GetValue(addr uint64, key []byte) (*values.KeyValueEntry, error
 		return nil, err
 	}
 
-	if bytes.Equal(entry.Key, key) && !entry.IsDeleted && !entry.IsExpired() {
+	if bytes.Equal(entry.Key, key) && !entry.IsDeleted && !values.IsExpired(entry) {
 		return entry, nil
 	}
 	return nil, nil

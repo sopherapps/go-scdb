@@ -257,7 +257,7 @@ func (bp *BufferPool) CompactFile(searchIndex *internal.InvertedIndex) error {
 					return e
 				}
 
-				if !kv.IsExpired() && !kv.IsDeleted {
+				if !values.IsExpired(kv) && !kv.IsDeleted {
 					kvSize := int64(len(kvByteArray))
 					// insert key value at the bottom of the new file
 					_, er := newFile.WriteAt(kvByteArray, newFileOffset)
@@ -346,7 +346,7 @@ func (bp *BufferPool) GetValue(kvAddress uint64, key []byte) (*values.KeyValueEn
 		return nil, err
 	}
 
-	if bytes.Equal(entry.Key, key) && !entry.IsExpired() && !entry.IsDeleted {
+	if bytes.Equal(entry.Key, key) && !values.IsExpired(entry) && !entry.IsDeleted {
 		return entry, nil
 	}
 
@@ -504,7 +504,7 @@ func (bp *BufferPool) GetManyKeyValues(addrs []uint64) ([]KeyValuePair, error) {
 			return nil, err
 		}
 
-		if !entry.IsDeleted && !entry.IsExpired() {
+		if !entry.IsDeleted && !values.IsExpired(entry) {
 			results = append(results, KeyValuePair{
 				K: entry.Key,
 				V: entry.Value,

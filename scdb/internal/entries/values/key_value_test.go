@@ -57,7 +57,7 @@ func TestKeyValueEntry_IsExpired(t *testing.T) {
 	expired := NewKeyValueEntry([]byte("expires"), []byte("bar"), 1666023836)
 	notExpired := NewKeyValueEntry([]byte("not_expired"), []byte("bar"), uint64(time.Now().Unix())*2)
 
-	assert.False(t, neverExpires.IsExpired())
-	assert.False(t, notExpired.IsExpired())
-	assert.True(t, expired.IsExpired())
+	assert.False(t, IsExpired(neverExpires))
+	assert.False(t, IsExpired(notExpired))
+	assert.True(t, IsExpired(expired))
 }
