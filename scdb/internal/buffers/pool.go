@@ -230,6 +230,13 @@ func (bp *BufferPool) CompactFile(searchIndex *inverted_index.InvertedIndex) err
 	numOfBlocks := int64(header.NumberOfIndexBlocks)
 	blockSize := int64(header.NetBlockSize)
 
+	if searchIndex != nil {
+		err = searchIndex.Clear()
+		if err != nil {
+			return err
+		}
+	}
+
 	for i := int64(0); i < numOfBlocks; i++ {
 		indexBlock, err := bp.readIndexBlock(i, blockSize)
 		if err != nil {
@@ -274,9 +281,11 @@ func (bp *BufferPool) CompactFile(searchIndex *inverted_index.InvertedIndex) err
 					}
 
 					// update search index
-					err = searchIndex.Add(kv.Key, newKvAddr, kv.Expiry)
-					if err != nil {
-						return err
+					if searchIndex != nil {
+						err = searchIndex.Add(kv.Key, newKvAddr, kv.Expiry)
+						if err != nil {
+							return err
+						}
 					}
 
 					// increment the new file offset

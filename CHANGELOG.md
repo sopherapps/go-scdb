@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2023-01-16
+
+### Added
+
+### Changed
+
+- Changed the `scdb.New()` signature, replacing `maxIndexKeyLen` option with `isSearchEnabled`.
+- Permanently set the maximum index key length to 3
+- Changed benchmarks to compare operations when search is enabled to when search is disabled.
+
+### Fixed
+
 ## [0.1.0] - 2023-01-14
 
 ### Added

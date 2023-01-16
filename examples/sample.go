@@ -21,7 +21,6 @@ func main() {
 	var redundantBlocks uint16 = 1
 	var poolCapacity uint64 = 10
 	var compactionInterval uint32 = 1_800
-	var maxIndexKeyLen uint32 = 3
 
 	store, err := scdb.New(
 		"db",
@@ -29,7 +28,7 @@ func main() {
 		&redundantBlocks,
 		&poolCapacity,
 		&compactionInterval,
-		&maxIndexKeyLen)
+		true)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}

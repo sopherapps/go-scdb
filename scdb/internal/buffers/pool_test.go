@@ -440,10 +440,12 @@ func TestBufferPool_CompactFile(t *testing.T) {
 	indexFileName := "testdb_pool.iscdb"
 	defer func() {
 		_ = os.Remove(fileName)
+		_ = os.Remove(indexFileName)
 	}()
 
 	// pre-clean up for right results
 	_ = os.Remove(fileName)
+	_ = os.Remove(indexFileName)
 
 	futureTimestamp := uint64(time.Now().Unix() * 2)
 	neverExpires := values.NewKeyValueEntry([]byte("never_expires"), []byte("bar"), 0)
@@ -639,6 +641,9 @@ func TestBufferPool_GetValue(t *testing.T) {
 
 func TestBufferPool_GetManyKeyValues(t *testing.T) {
 	fileName := "testdb_pool.scdb"
+	defer func() {
+		_ = os.Remove(fileName)
+	}()
 
 	t.Run("GetManyKeyValuesReturnsTheKeyValuesForTheGivenAddresses", func(t *testing.T) {
 		defer func() {
