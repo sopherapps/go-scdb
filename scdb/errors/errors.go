@@ -31,3 +31,18 @@ func (ecs *ErrCollisionSaturation) Error() string {
 func NewErrCollisionSaturation(k []byte) *ErrCollisionSaturation {
 	return &ErrCollisionSaturation{fmt.Sprintf("no free slot for %s", k)}
 }
+
+// ErrNotSupported is the error when there is an attempt to
+// do an unsupported operation
+type ErrNotSupported struct {
+	op string
+}
+
+func (ens *ErrNotSupported) Error() string {
+	return fmt.Sprintf("%s not supported", ens.op)
+}
+
+// NewErrNotSupported creates a new ErrNotSupported
+func NewErrNotSupported(op string) *ErrNotSupported {
+	return &ErrNotSupported{op}
+}

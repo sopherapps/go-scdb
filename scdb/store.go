@@ -72,11 +72,10 @@ type Store struct {
 //     Compaction is important because it reclaims this space and reduces the size
 //     of the database file.
 //
-//   - `maxIndexKeyLen` - default 3:
-//     The maximum number of characters in each key in the search inverted index
-//     The inverted index is used for full-text search of keys to get all key-values
-//     whose keys start with a given byte array.
-func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *uint64, compactionInterval *uint32, maxIndexKeyLen *uint32) (*Store, error) {
+//   - `isSearchEnabled` - default false:
+//     Whether the search capability of the store is enabled.
+//     Note that when search is enabled, `set`, `delete`, `clear`, `compact` operations become slower.
+func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *uint64, compactionInterval *uint32, isSearchEnabled bool) (*Store, error) {
 	err := os.MkdirAll(path, 0755)
 	if err != nil {
 		return nil, err
@@ -94,9 +93,12 @@ func New(path string, maxKeys *uint64, redundantBlocks *uint16, poolCapacity *ui
 	}
 
 	searchIndexFilePath := filepath.Join(path, defaultSearchIndexFile)
-	searchIndex, err := inverted_index.NewInvertedIndex(searchIndexFilePath, maxIndexKeyLen, maxKeys, redundantBlocks)
-	if err != nil {
-		return nil, err
+	var searchIndex *inverted_index.InvertedIndex
+	if isSearchEnabled {
+		searchIndex, err = inverted_index.NewInvertedIndex(searchIndexFilePath, nil, maxKeys, redundantBlocks)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	interval := 3_600 * time.Second
@@ -169,7 +171,11 @@ func (s *Store) Set(k []byte, v []byte, ttl *uint64) error {
 			}
 
 			// Update the search index
-			return s.searchIndex.Add(k, prevLastOffset, expiry)
+			if s.searchIndex != nil {
+				return s.searchIndex.Add(k, prevLastOffset, expiry)
+			}
+
+			return nil
 		}
 
 	}
@@ -228,6 +234,10 @@ func (s *Store) Get(k []byte) ([]byte, error) {
 //
 // returns a list of pairs of key-value i.e. `buffers.KeyValuePair`
 func (s *Store) Search(term []byte, skip uint64, limit uint64) ([]buffers.KeyValuePair, error) {
+	if s.searchIndex == nil {
+		return nil, errors.NewErrNotSupported("search")
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -276,9 +286,14 @@ func (s *Store) Delete(k []byte) error {
 		} // else continue looping
 
 	}
+
 	// if it is not found, no error is thrown
 
-	return s.searchIndex.Remove(k)
+	if s.searchIndex != nil {
+		return s.searchIndex.Remove(k)
+	}
+
+	return nil
 }
 
 // Clear removes all data in the store
@@ -291,7 +306,11 @@ func (s *Store) Clear() error {
 		return err
 	}
 
-	return s.searchIndex.Clear()
+	if s.searchIndex != nil {
+		return s.searchIndex.Clear()
+	}
+
+	return nil
 }
 
 // Compact manually removes dangling key-value pairs in the database file
@@ -336,13 +355,15 @@ func (s *Store) Close() error {
 		return err
 	}
 
-	err = s.searchIndex.Close()
-	if err != nil {
-		return err
+	if s.searchIndex != nil {
+		err = s.searchIndex.Close()
+		if err != nil {
+			return err
+		}
+		s.searchIndex = nil
 	}
 
 	s.header = nil
-	s.searchIndex = nil
 
 	return nil
 }

@@ -17,7 +17,7 @@ type testRecord struct {
 	v []byte
 }
 
-var RECORDS = []testRecord{
+var Records = []testRecord{
 	{[]byte("hey"), []byte("English")},
 	{[]byte("hi"), []byte("English")},
 	{[]byte("salut"), []byte("French")},
@@ -27,7 +27,7 @@ var RECORDS = []testRecord{
 	{[]byte("mulimuta"), []byte("Runyoro")},
 }
 
-var SEARCH_RECORDS = []testRecord{
+var SearchRecords = []testRecord{
 	{[]byte("foo"), []byte("eng")},
 	{[]byte("fore"), []byte("span")},
 	{[]byte("food"), []byte("lug")},
@@ -36,7 +36,7 @@ var SEARCH_RECORDS = []testRecord{
 	{[]byte("pig"), []byte("dan")},
 }
 
-var SEARCH_TERMS = [][]byte{
+var SearchTerms = [][]byte{
 	[]byte("f"),
 	[]byte("fo"),
 	[]byte("foo"),
@@ -54,17 +54,17 @@ var SEARCH_TERMS = [][]byte{
 func TestStore_Get(t *testing.T) {
 	dbPath := "testdb_get"
 	removeStore(t, dbPath)
-	store := createStore(t, dbPath, nil)
+	store := createStore(t, dbPath, nil, false)
 	defer func() {
 		_ = store.Close()
 	}()
-	insertRecords(t, store, RECORDS, nil)
+	insertRecords(t, store, Records, nil)
 
 	t.Run("GetReturnsValueForGivenKey", func(t *testing.T) {
 		defer func() {
 			removeStore(t, dbPath)
 		}()
-		assertStoreContains(t, store, RECORDS)
+		assertStoreContains(t, store, Records)
 	})
 
 	t.Run("GetReturnsNilForNonExistentKey", func(t *testing.T) {
@@ -76,10 +76,24 @@ func TestStore_Get(t *testing.T) {
 	})
 }
 
+func TestStore_SearchDisabled(t *testing.T) {
+	dbPath := "testdb_search"
+	removeStore(t, dbPath)
+	store := createStore(t, dbPath, nil, false)
+	defer func() {
+		_ = store.Close()
+		removeStore(t, dbPath)
+	}()
+
+	insertRecords(t, store, SearchRecords, nil)
+	_, err := store.Search([]byte("f"), 0, 0)
+	assert.Contains(t, err.Error(), "search not supported", "got %v", err)
+}
+
 func TestStore_Search(t *testing.T) {
 	dbPath := "testdb_search"
 	removeStore(t, dbPath)
-	store := createStore(t, dbPath, nil)
+	store := createStore(t, dbPath, nil, true)
 	defer func() {
 		_ = store.Close()
 		removeStore(t, dbPath)
@@ -112,7 +126,7 @@ func TestStore_Search(t *testing.T) {
 			{[]byte("bare"), 0, 0, []buffers.KeyValuePair{}},
 		}
 
-		insertRecords(t, store, SEARCH_RECORDS, nil)
+		insertRecords(t, store, SearchRecords, nil)
 		for _, rec := range table {
 			got, err := store.Search(rec.term, rec.skip, rec.limit)
 			if err != nil {
@@ -136,7 +150,7 @@ func TestStore_Search(t *testing.T) {
 			{[]byte("fo"), 1, 1, []buffers.KeyValuePair{{K: []byte("fore"), V: []byte("span")}}},
 		}
 
-		insertRecords(t, store, SEARCH_RECORDS, nil)
+		insertRecords(t, store, SearchRecords, nil)
 		for _, rec := range table {
 			got, err := store.Search(rec.term, rec.skip, rec.limit)
 			if err != nil {
@@ -166,9 +180,9 @@ func TestStore_Search(t *testing.T) {
 			{[]byte("bandana"), 0, 0, []buffers.KeyValuePair{}},
 			{[]byte("bare"), 0, 0, []buffers.KeyValuePair{}},
 		}
-		recordsToExpire := []testRecord{SEARCH_RECORDS[0], SEARCH_RECORDS[2], SEARCH_RECORDS[3]}
+		recordsToExpire := []testRecord{SearchRecords[0], SearchRecords[2], SearchRecords[3]}
 		ttl := uint64(1)
-		insertRecords(t, store, SEARCH_RECORDS, nil)
+		insertRecords(t, store, SearchRecords, nil)
 		insertRecords(t, store, recordsToExpire, &ttl)
 
 		// wait for some items to expire
@@ -204,7 +218,7 @@ func TestStore_Search(t *testing.T) {
 		}
 		keysToDelete := [][]byte{[]byte("foo"), []byte("food"), []byte("bar"), []byte("band")}
 
-		insertRecords(t, store, SEARCH_RECORDS, nil)
+		insertRecords(t, store, SearchRecords, nil)
 		deleteRecords(t, store, keysToDelete)
 
 		//for (term, expected) in test_data:
@@ -219,13 +233,13 @@ func TestStore_Search(t *testing.T) {
 	})
 
 	t.Run("SearchAfterClearReturnsAnEmptyList", func(t *testing.T) {
-		insertRecords(t, store, SEARCH_RECORDS, nil)
+		insertRecords(t, store, SearchRecords, nil)
 		err := store.Clear()
 		if err != nil {
 			t.Fatalf("error clearing: %s", err)
 		}
 
-		for _, term := range SEARCH_TERMS {
+		for _, term := range SearchTerms {
 			got, err := store.Search(term, 0, 0)
 			if err != nil {
 				t.Fatalf("error searching: %s", err)
@@ -245,12 +259,12 @@ func TestStore_Set(t *testing.T) {
 		defer func() {
 			removeStore(t, dbPath)
 		}()
-		store := createStore(t, dbPath, nil)
+		store := createStore(t, dbPath, nil, false)
 		defer func() {
 			_ = store.Close()
 		}()
-		insertRecords(t, store, RECORDS, nil)
-		assertStoreContains(t, store, RECORDS)
+		insertRecords(t, store, Records, nil)
+		assertStoreContains(t, store, Records)
 	})
 
 	t.Run("SetWithTTLInsertsKeyValuesThatExpireAfterTTLSeconds", func(t *testing.T) {
@@ -259,17 +273,17 @@ func TestStore_Set(t *testing.T) {
 		}()
 		var ttl uint64 = 1
 
-		store := createStore(t, dbPath, nil)
+		store := createStore(t, dbPath, nil, false)
 		defer func() {
 			_ = store.Close()
 		}()
-		insertRecords(t, store, RECORDS[:3], nil)
-		insertRecords(t, store, RECORDS[3:], &ttl)
+		insertRecords(t, store, Records[:3], nil)
+		insertRecords(t, store, Records[3:], &ttl)
 
 		time.Sleep(2 * time.Second)
 
-		nonExistentKeys := extractKeysFromRecords(RECORDS[3:])
-		assertStoreContains(t, store, RECORDS[:3])
+		nonExistentKeys := extractKeysFromRecords(Records[3:])
+		assertStoreContains(t, store, Records[:3])
 		assertKeysDontExist(t, store, nonExistentKeys)
 	})
 
@@ -294,11 +308,11 @@ func TestStore_Set(t *testing.T) {
 			{[]byte("mulimuta"), []byte("Aliguma")},
 		}
 
-		store := createStore(t, dbPath, nil)
+		store := createStore(t, dbPath, nil, false)
 		defer func() {
 			_ = store.Close()
 		}()
-		insertRecords(t, store, RECORDS, nil)
+		insertRecords(t, store, Records, nil)
 		insertRecords(t, store, updates, nil)
 		assertStoreContains(t, store, expected)
 	})
@@ -308,22 +322,22 @@ func TestStore_Set(t *testing.T) {
 			removeStore(t, dbPath)
 		}()
 		func() {
-			store := createStore(t, dbPath, nil)
+			store := createStore(t, dbPath, nil, false)
 			defer func() {
 				_ = store.Close()
 			}()
-			insertRecords(t, store, RECORDS, nil)
+			insertRecords(t, store, Records, nil)
 		}()
 
 		// the old store is expected to be garbage collected around here.
 		runtime.GC()
 
 		// Open another store
-		store := createStore(t, dbPath, nil)
+		store := createStore(t, dbPath, nil, false)
 		defer func() {
 			_ = store.Close()
 		}()
-		assertStoreContains(t, store, RECORDS)
+		assertStoreContains(t, store, Records)
 	})
 }
 
@@ -335,15 +349,15 @@ func TestStore_Delete(t *testing.T) {
 		defer func() {
 			removeStore(t, dbPath)
 		}()
-		keysToDelete := extractKeysFromRecords(RECORDS[3:])
+		keysToDelete := extractKeysFromRecords(Records[3:])
 
-		store := createStore(t, dbPath, nil)
+		store := createStore(t, dbPath, nil, false)
 		defer func() {
 			_ = store.Close()
 		}()
-		insertRecords(t, store, RECORDS, nil)
+		insertRecords(t, store, Records, nil)
 		deleteRecords(t, store, keysToDelete)
-		assertStoreContains(t, store, RECORDS[:3])
+		assertStoreContains(t, store, Records[:3])
 		assertKeysDontExist(t, store, keysToDelete)
 	})
 
@@ -351,14 +365,14 @@ func TestStore_Delete(t *testing.T) {
 		defer func() {
 			removeStore(t, dbPath)
 		}()
-		keysToDelete := extractKeysFromRecords(RECORDS[3:])
+		keysToDelete := extractKeysFromRecords(Records[3:])
 
 		func() {
-			store := createStore(t, dbPath, nil)
+			store := createStore(t, dbPath, nil, false)
 			defer func() {
 				_ = store.Close()
 			}()
-			insertRecords(t, store, RECORDS, nil)
+			insertRecords(t, store, Records, nil)
 			deleteRecords(t, store, keysToDelete)
 		}()
 
@@ -366,11 +380,11 @@ func TestStore_Delete(t *testing.T) {
 		runtime.GC()
 
 		// open another store
-		store := createStore(t, dbPath, nil)
+		store := createStore(t, dbPath, nil, false)
 		defer func() {
 			_ = store.Close()
 		}()
-		assertStoreContains(t, store, RECORDS[:3])
+		assertStoreContains(t, store, Records[:3])
 		assertKeysDontExist(t, store, keysToDelete)
 	})
 }
@@ -383,18 +397,18 @@ func TestStore_Clear(t *testing.T) {
 		defer func() {
 			removeStore(t, dbPath)
 		}()
-		store := createStore(t, dbPath, nil)
+		store := createStore(t, dbPath, nil, false)
 		defer func() {
 			_ = store.Close()
 		}()
-		insertRecords(t, store, RECORDS, nil)
+		insertRecords(t, store, Records, nil)
 
 		err := store.Clear()
 		if err != nil {
 			t.Fatalf("error clearing store: %s", err)
 		}
 
-		allKeys := extractKeysFromRecords(RECORDS)
+		allKeys := extractKeysFromRecords(Records)
 		assertKeysDontExist(t, store, allKeys)
 	})
 
@@ -403,11 +417,11 @@ func TestStore_Clear(t *testing.T) {
 			removeStore(t, dbPath)
 		}()
 		func() {
-			store := createStore(t, dbPath, nil)
+			store := createStore(t, dbPath, nil, false)
 			defer func() {
 				_ = store.Close()
 			}()
-			insertRecords(t, store, RECORDS, nil)
+			insertRecords(t, store, Records, nil)
 			err := store.Clear()
 			if err != nil {
 				t.Fatalf("error clearing store: %s", err)
@@ -418,11 +432,11 @@ func TestStore_Clear(t *testing.T) {
 		runtime.GC()
 
 		// Create new store
-		store := createStore(t, dbPath, nil)
+		store := createStore(t, dbPath, nil, false)
 		defer func() {
 			_ = store.Close()
 		}()
-		allKeys := extractKeysFromRecords(RECORDS)
+		allKeys := extractKeysFromRecords(Records)
 		assertKeysDontExist(t, store, allKeys)
 	})
 }
@@ -437,13 +451,13 @@ func TestStore_Compact(t *testing.T) {
 		}()
 		var ttl uint64 = 1
 
-		store := createStore(t, dbPath, nil)
+		store := createStore(t, dbPath, nil, false)
 		defer func() {
 			_ = store.Close()
 		}()
-		insertRecords(t, store, RECORDS[:3], nil)
-		insertRecords(t, store, RECORDS[3:], &ttl)
-		deleteRecords(t, store, [][]byte{RECORDS[2].k})
+		insertRecords(t, store, Records[:3], nil)
+		insertRecords(t, store, Records[3:], &ttl)
+		deleteRecords(t, store, [][]byte{Records[2].k})
 
 		initialFileSize := getFileSize(t, dbPath)
 
@@ -456,8 +470,8 @@ func TestStore_Compact(t *testing.T) {
 		finalFileSize := getFileSize(t, dbPath)
 
 		assert.Less(t, finalFileSize, initialFileSize)
-		nonExistentKeys := extractKeysFromRecords(RECORDS[2:])
-		assertStoreContains(t, store, RECORDS[:2])
+		nonExistentKeys := extractKeysFromRecords(Records[2:])
+		assertStoreContains(t, store, Records[:2])
 		assertKeysDontExist(t, store, nonExistentKeys)
 	})
 
@@ -468,13 +482,13 @@ func TestStore_Compact(t *testing.T) {
 		var ttl uint64 = 1
 		var compactionInterval uint32 = 2
 
-		store := createStore(t, dbPath, &compactionInterval)
+		store := createStore(t, dbPath, &compactionInterval, false)
 		defer func() {
 			_ = store.Close()
 		}()
-		insertRecords(t, store, RECORDS[:3], nil)
-		insertRecords(t, store, RECORDS[3:], &ttl)
-		deleteRecords(t, store, [][]byte{RECORDS[2].k})
+		insertRecords(t, store, Records[:3], nil)
+		insertRecords(t, store, Records[3:], &ttl)
+		deleteRecords(t, store, [][]byte{Records[2].k})
 
 		initialFileSize := getFileSize(t, dbPath)
 
@@ -483,8 +497,8 @@ func TestStore_Compact(t *testing.T) {
 		finalFileSize := getFileSize(t, dbPath)
 
 		assert.Less(t, finalFileSize, initialFileSize)
-		nonExistentKeys := extractKeysFromRecords(RECORDS[2:])
-		assertStoreContains(t, store, RECORDS[:2])
+		nonExistentKeys := extractKeysFromRecords(Records[2:])
+		assertStoreContains(t, store, Records[:2])
 		assertKeysDontExist(t, store, nonExistentKeys)
 	})
 }
@@ -499,13 +513,13 @@ func TestStore_Close(t *testing.T) {
 	var ttl uint64 = 1
 	var compactionInterval uint32 = 2
 
-	store := createStore(t, dbPath, &compactionInterval)
+	store := createStore(t, dbPath, &compactionInterval, false)
 	defer func() {
 		_ = store.Close()
 	}()
-	insertRecords(t, store, RECORDS[:3], nil)
-	insertRecords(t, store, RECORDS[3:], &ttl)
-	deleteRecords(t, store, [][]byte{RECORDS[2].k})
+	insertRecords(t, store, Records[:3], nil)
+	insertRecords(t, store, Records[3:], &ttl)
+	deleteRecords(t, store, [][]byte{Records[2].k})
 
 	err := store.Close()
 	if err != nil {
@@ -532,23 +546,69 @@ func BenchmarkStore_Clear(b *testing.B) {
 	defer removeStoreForBenchmarks(b, dbPath)
 
 	// Create new store
-	store := createStoreForBenchmarks(b, dbPath, nil)
+	store := createStoreForBenchmarks(b, dbPath, nil, false)
 	defer func() {
 		_ = store.Close()
 	}()
 
-	ttl := uint64(3_600)
-
 	b.Run("Clear", func(b *testing.B) {
-		insertRecordsForBenchmarks(b, store, RECORDS, nil)
+		insertRecordsForBenchmarks(b, store, Records, nil)
 
 		for i := 0; i < b.N; i++ {
 			_ = store.Clear()
 		}
 	})
+}
+
+func BenchmarkStore_ClearWithSearch(b *testing.B) {
+	dbPath := "testdb_clear"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	store := createStoreForBenchmarks(b, dbPath, nil, true)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	b.Run("ClearWithSearch", func(b *testing.B) {
+		insertRecordsForBenchmarks(b, store, Records, nil)
+
+		for i := 0; i < b.N; i++ {
+			_ = store.Clear()
+		}
+	})
+}
+
+func BenchmarkStore_ClearWithTTL(b *testing.B) {
+	dbPath := "testdb_clear"
+	ttl := uint64(3_600)
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	store := createStoreForBenchmarks(b, dbPath, nil, false)
+	defer func() {
+		_ = store.Close()
+	}()
 
 	b.Run(fmt.Sprintf("Clear with ttl: %d", ttl), func(b *testing.B) {
-		insertRecordsForBenchmarks(b, store, RECORDS, nil)
+		insertRecordsForBenchmarks(b, store, Records, &ttl)
+
+		for i := 0; i < b.N; i++ {
+			_ = store.Clear()
+		}
+	})
+}
+
+func BenchmarkStore_ClearWithTTLAndSearch(b *testing.B) {
+	dbPath := "testdb_clear"
+	ttl := uint64(3_600)
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	store := createStoreForBenchmarks(b, dbPath, nil, true)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	b.Run(fmt.Sprintf("ClearWithTTLAndSearch: %d", ttl), func(b *testing.B) {
+		insertRecordsForBenchmarks(b, store, Records, &ttl)
 
 		for i := 0; i < b.N; i++ {
 			_ = store.Clear()
@@ -560,18 +620,10 @@ func BenchmarkStore_Compact(b *testing.B) {
 	dbPath := "testdb_compact"
 	defer removeStoreForBenchmarks(b, dbPath)
 
-	// Create new store
-	store := createStoreForBenchmarks(b, dbPath, nil)
+	store := prepCompactBenchmark(b, dbPath, uint64(1), false)
 	defer func() {
 		_ = store.Close()
 	}()
-
-	ttl := uint64(1)
-
-	insertRecordsForBenchmarks(b, store, RECORDS[:3], nil)
-	insertRecordsForBenchmarks(b, store, RECORDS[3:], &ttl)
-	deleteRecordsForBenchmarks(b, store, [][]byte{RECORDS[3].k})
-	time.Sleep(2 * time.Second)
 
 	b.Run("Compact", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
@@ -580,19 +632,32 @@ func BenchmarkStore_Compact(b *testing.B) {
 	})
 }
 
-func BenchmarkStore_DeleteWithoutTtl(b *testing.B) {
-	dbPath := "testdb_delete"
+func BenchmarkStore_CompactWithSearch(b *testing.B) {
+	dbPath := "testdb_compact"
 	defer removeStoreForBenchmarks(b, dbPath)
 
-	// Create new store
-	store := createStoreForBenchmarks(b, dbPath, nil)
+	store := prepCompactBenchmark(b, dbPath, uint64(1), true)
 	defer func() {
 		_ = store.Close()
 	}()
 
-	insertRecordsForBenchmarks(b, store, RECORDS, nil)
+	b.Run("CompactWithSearch", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_ = store.Compact()
+		}
+	})
+}
 
-	for _, record := range RECORDS {
+func BenchmarkStore_Delete(b *testing.B) {
+	dbPath := "testdb_delete"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	store := prepDeleteBenchmark(b, dbPath, nil, false)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	for _, record := range Records {
 		b.Run(fmt.Sprintf("Delete key %s", record.k), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_ = store.Delete(record.k)
@@ -601,21 +666,18 @@ func BenchmarkStore_DeleteWithoutTtl(b *testing.B) {
 	}
 }
 
-func BenchmarkStore_DeleteWithTtl(b *testing.B) {
+func BenchmarkStore_DeleteWithTTL(b *testing.B) {
 	dbPath := "testdb_delete"
-	defer removeStoreForBenchmarks(b, dbPath)
-
-	// Create new store
-	store := createStoreForBenchmarks(b, dbPath, nil)
-	defer func() {
-		_ = store.Close()
-	}()
-
 	ttl := uint64(3_600)
-	insertRecordsForBenchmarks(b, store, RECORDS, &ttl)
+	defer removeStoreForBenchmarks(b, dbPath)
 
-	for _, record := range RECORDS {
-		b.Run(fmt.Sprintf("Delete key %s", record.k), func(b *testing.B) {
+	store := prepDeleteBenchmark(b, dbPath, &ttl, false)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	for _, record := range Records {
+		b.Run(fmt.Sprintf("DeleteWithTTL %s", record.k), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_ = store.Delete(record.k)
 			}
@@ -623,19 +685,55 @@ func BenchmarkStore_DeleteWithTtl(b *testing.B) {
 	}
 }
 
-func BenchmarkStore_GetWithoutTtl(b *testing.B) {
+func BenchmarkStore_DeleteWithSearch(b *testing.B) {
+	dbPath := "testdb_delete"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	// Create new store with search enabled but no ttl provided
+	store := prepDeleteBenchmark(b, dbPath, nil, true)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	for _, record := range Records {
+		b.Run(fmt.Sprintf("DeleteWithSearch %s", record.k), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = store.Delete(record.k)
+			}
+		})
+	}
+}
+
+func BenchmarkStore_DeleteWithTTLAndSearch(b *testing.B) {
+	dbPath := "testdb_delete"
+	ttl := uint64(3_600)
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	store := prepDeleteBenchmark(b, dbPath, &ttl, true)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	for _, record := range Records {
+		b.Run(fmt.Sprintf("DeleteWithTTLAndSearchh %s", record.k), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = store.Delete(record.k)
+			}
+		})
+	}
+}
+
+func BenchmarkStore_Get(b *testing.B) {
 	dbPath := "testdb_get"
 	defer removeStoreForBenchmarks(b, dbPath)
 
-	// Create new store
-	store := createStoreForBenchmarks(b, dbPath, nil)
+	// Create new store with no ttl and with search disabled
+	store := prepGetBenchmark(b, dbPath, nil, false)
 	defer func() {
 		_ = store.Close()
 	}()
 
-	insertRecordsForBenchmarks(b, store, RECORDS, nil)
-
-	for _, record := range RECORDS {
+	for _, record := range Records {
 		b.Run(fmt.Sprintf("Get %s", record.k), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_, _ = store.Get(record.k)
@@ -646,20 +744,53 @@ func BenchmarkStore_GetWithoutTtl(b *testing.B) {
 
 func BenchmarkStore_GetWithTtl(b *testing.B) {
 	dbPath := "testdb_get"
+	ttl := uint64(3_600)
 	defer removeStoreForBenchmarks(b, dbPath)
 
-	// Create new store
-	store := createStoreForBenchmarks(b, dbPath, nil)
+	store := prepGetBenchmark(b, dbPath, &ttl, false)
 	defer func() {
 		_ = store.Close()
 	}()
 
+	for _, record := range Records {
+		b.Run(fmt.Sprintf("GetWithTTL %s", record.k), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, _ = store.Get(record.k)
+			}
+		})
+	}
+}
+
+func BenchmarkStore_GetWithSearch(b *testing.B) {
+	dbPath := "testdb_get"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	store := prepGetBenchmark(b, dbPath, nil, true)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	for _, record := range Records {
+		b.Run(fmt.Sprintf("GetWithSearch %s", record.k), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, _ = store.Get(record.k)
+			}
+		})
+	}
+}
+
+func BenchmarkStore_GetWithTTLAndSearch(b *testing.B) {
+	dbPath := "testdb_get"
 	ttl := uint64(3_600)
+	defer removeStoreForBenchmarks(b, dbPath)
 
-	insertRecordsForBenchmarks(b, store, RECORDS, &ttl)
+	store := prepGetBenchmark(b, dbPath, &ttl, true)
+	defer func() {
+		_ = store.Close()
+	}()
 
-	for _, record := range RECORDS {
-		b.Run(fmt.Sprintf("Get %s", record.k), func(b *testing.B) {
+	for _, record := range Records {
+		b.Run(fmt.Sprintf("GetWithTTLAndSearch %s", record.k), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_, _ = store.Get(record.k)
 			}
@@ -672,14 +803,14 @@ func BenchmarkStore_SearchWithoutPagination(b *testing.B) {
 	defer removeStoreForBenchmarks(b, dbPath)
 
 	// Create new store
-	store := createStoreForBenchmarks(b, dbPath, nil)
+	store := createStoreForBenchmarks(b, dbPath, nil, true)
 	defer func() {
 		_ = store.Close()
 	}()
 
-	insertRecordsForBenchmarks(b, store, SEARCH_RECORDS, nil)
+	insertRecordsForBenchmarks(b, store, SearchRecords, nil)
 
-	for _, term := range SEARCH_TERMS {
+	for _, term := range SearchTerms {
 		b.Run(fmt.Sprintf("Search (no pagination) %s", term), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_, _ = store.Search(term, 0, 0)
@@ -693,14 +824,14 @@ func BenchmarkStore_SearchWithPagination(b *testing.B) {
 	defer removeStoreForBenchmarks(b, dbPath)
 
 	// Create new store
-	store := createStoreForBenchmarks(b, dbPath, nil)
+	store := createStoreForBenchmarks(b, dbPath, nil, true)
 	defer func() {
 		_ = store.Close()
 	}()
 
-	insertRecordsForBenchmarks(b, store, SEARCH_RECORDS, nil)
+	insertRecordsForBenchmarks(b, store, SearchRecords, nil)
 
-	for _, term := range SEARCH_TERMS {
+	for _, term := range SearchTerms {
 		b.Run(fmt.Sprintf("Search (paginated) %s", term), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_, _ = store.Search(term, 1, 2)
@@ -709,39 +840,34 @@ func BenchmarkStore_SearchWithPagination(b *testing.B) {
 	}
 }
 
-func BenchmarkStore_SetWithoutTtl(b *testing.B) {
+func BenchmarkStore_Set(b *testing.B) {
 	dbPath := "testdb_set"
 	defer removeStoreForBenchmarks(b, dbPath)
 
-	// Create new store
-	store := createStoreForBenchmarks(b, dbPath, nil)
+	store := prepSetBenchmark(b, dbPath, false)
 	defer func() {
 		_ = store.Close()
 	}()
-	for _, record := range RECORDS {
+	for _, record := range Records {
 		b.Run(fmt.Sprintf("Set %s %s", record.k, record.v), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_ = store.Set(record.k, record.v, nil)
 			}
 		})
 	}
-
 }
 
-func BenchmarkStore_SetWithTtl(b *testing.B) {
+func BenchmarkStore_SetWithTTL(b *testing.B) {
 	dbPath := "testdb_set"
+	ttl := uint64(3_600)
 	defer removeStoreForBenchmarks(b, dbPath)
 
-	// Create new store
-	store := createStoreForBenchmarks(b, dbPath, nil)
+	store := prepSetBenchmark(b, dbPath, false)
 	defer func() {
 		_ = store.Close()
 	}()
-
-	ttl := uint64(3_600)
-
-	for _, record := range RECORDS {
-		b.Run(fmt.Sprintf("Set %s %s", record.k, record.v), func(b *testing.B) {
+	for _, record := range Records {
+		b.Run(fmt.Sprintf("SetWithTTL %s %s", record.k, record.v), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_ = store.Set(record.k, record.v, &ttl)
 			}
@@ -750,12 +876,46 @@ func BenchmarkStore_SetWithTtl(b *testing.B) {
 
 }
 
+func BenchmarkStore_SetWithSearch(b *testing.B) {
+	dbPath := "testdb_set"
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	store := prepSetBenchmark(b, dbPath, true)
+	defer func() {
+		_ = store.Close()
+	}()
+	for _, record := range Records {
+		b.Run(fmt.Sprintf("SetWithSearch %s %s", record.k, record.v), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = store.Set(record.k, record.v, nil)
+			}
+		})
+	}
+}
+
+func BenchmarkStore_SetWithTTLAndSearch(b *testing.B) {
+	dbPath := "testdb_set"
+	ttl := uint64(3_600)
+	defer removeStoreForBenchmarks(b, dbPath)
+
+	store := prepSetBenchmark(b, dbPath, true)
+	defer func() {
+		_ = store.Close()
+	}()
+	for _, record := range Records {
+		b.Run(fmt.Sprintf("SetWithTTLAndSearch %s %s", record.k, record.v), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_ = store.Set(record.k, record.v, &ttl)
+			}
+		})
+	}
+}
+
 func ExampleNew() {
 	var maxKeys uint64 = 1_000_000
 	var redundantBlocks uint16 = 1
 	var poolCapacity uint64 = 10
 	var compactionInterval uint32 = 1_800
-	var maxIndexKeyLen uint32 = 3
 
 	store, err := New(
 		"testdb",
@@ -763,7 +923,7 @@ func ExampleNew() {
 		&redundantBlocks,
 		&poolCapacity,
 		&compactionInterval,
-		&maxIndexKeyLen)
+		true)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
@@ -773,7 +933,7 @@ func ExampleNew() {
 }
 
 func ExampleStore_Set() {
-	store, err := New("testdb", nil, nil, nil, nil, nil)
+	store, err := New("testdb", nil, nil, nil, nil, false)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
@@ -794,7 +954,7 @@ func ExampleStore_Set() {
 }
 
 func ExampleStore_Get() {
-	store, err := New("testdb", nil, nil, nil, nil, nil)
+	store, err := New("testdb", nil, nil, nil, nil, false)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
@@ -817,7 +977,7 @@ func ExampleStore_Get() {
 }
 
 func ExampleStore_Search() {
-	store, err := New("testdb", nil, nil, nil, nil, nil)
+	store, err := New("testdb", nil, nil, nil, nil, true)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
@@ -862,7 +1022,7 @@ func ExampleStore_Search() {
 }
 
 func ExampleStore_Delete() {
-	store, err := New("testdb", nil, nil, nil, nil, nil)
+	store, err := New("testdb", nil, nil, nil, nil, false)
 	if err != nil {
 		log.Fatalf("error opening store: %s", err)
 	}
@@ -893,8 +1053,8 @@ func removeStoreForBenchmarks(b *testing.B, path string) {
 }
 
 // createStore is a utility to create a store at the given path
-func createStore(t *testing.T, path string, compactionInterval *uint32) *Store {
-	store, err := New(path, nil, nil, nil, compactionInterval, nil)
+func createStore(t *testing.T, path string, compactionInterval *uint32, isSearchEnabled bool) *Store {
+	store, err := New(path, nil, nil, nil, compactionInterval, isSearchEnabled)
 	if err != nil {
 		t.Fatalf("error opening store: %s", err)
 	}
@@ -902,8 +1062,8 @@ func createStore(t *testing.T, path string, compactionInterval *uint32) *Store {
 }
 
 // createStoreForBenchmarks is a utility to create a store at the given path
-func createStoreForBenchmarks(b *testing.B, path string, compactionInterval *uint32) *Store {
-	store, err := New(path, nil, nil, nil, compactionInterval, nil)
+func createStoreForBenchmarks(b *testing.B, path string, compactionInterval *uint32, isSearchEnabled bool) *Store {
+	store, err := New(path, nil, nil, nil, compactionInterval, isSearchEnabled)
 	if err != nil {
 		b.Fatalf("error opening store: %s", err)
 	}
@@ -987,4 +1147,38 @@ func assertKeysDontExist(t *testing.T, store *Store, keys [][]byte) {
 		assert.Nil(t, err)
 		assert.Nil(t, got)
 	}
+}
+
+// prepCompactBenchmark prepares a store for the benchmarks for the `compact` operations, returning it
+func prepCompactBenchmark(b *testing.B, dbPath string, ttl uint64, isSearchEnabled bool) *Store {
+	removeStoreForBenchmarks(b, dbPath)
+	store := createStoreForBenchmarks(b, dbPath, nil, isSearchEnabled)
+	insertRecordsForBenchmarks(b, store, Records[:3], nil)
+	insertRecordsForBenchmarks(b, store, Records[3:], &ttl)
+	deleteRecordsForBenchmarks(b, store, [][]byte{Records[3].k})
+	time.Sleep(2 * time.Second)
+	return store
+}
+
+// prepDeleteBenchmark prepares a store for the benchmarks for the `delete` operations, returning it
+func prepDeleteBenchmark(b *testing.B, dbPath string, ttl *uint64, isSearchEnabled bool) *Store {
+	removeStoreForBenchmarks(b, dbPath)
+	store := createStoreForBenchmarks(b, dbPath, nil, isSearchEnabled)
+	insertRecordsForBenchmarks(b, store, Records, ttl)
+	return store
+}
+
+// prepGetBenchmark prepares a store for the benchmarks for the `get` operations, returning it
+func prepGetBenchmark(b *testing.B, dbPath string, ttl *uint64, isSearchEnabled bool) *Store {
+	removeStoreForBenchmarks(b, dbPath)
+	store := createStoreForBenchmarks(b, dbPath, nil, isSearchEnabled)
+	insertRecordsForBenchmarks(b, store, Records, ttl)
+	return store
+}
+
+// prepSetBenchmark prepares a store for the benchmarks for the `set` operations, returning it
+func prepSetBenchmark(b *testing.B, dbPath string, isSearchEnabled bool) *Store {
+	removeStoreForBenchmarks(b, dbPath)
+	store := createStoreForBenchmarks(b, dbPath, nil, isSearchEnabled)
+	return store
 }
