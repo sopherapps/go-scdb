@@ -80,9 +80,12 @@ func ExtractKeyValueEntryFromByteArray(data []byte, offset uint64) (*KeyValueEnt
 	}
 
 	valueSize := uint64(size - keySize - KeyValueMinSizeInBytes)
-	value, err := internal.SafeSlice(data, offset+kSize+17, offset+kSize+17+valueSize, dataLength)
-	if err != nil {
-		return nil, err
+	value := []byte("")
+	if valueSize > 0 {
+		value, err = internal.SafeSlice(data, offset+kSize+17, offset+kSize+17+valueSize, dataLength)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	entry := KeyValueEntry{

@@ -44,6 +44,20 @@ func TestExtractKeyValueEntryFromByteArray(t *testing.T) {
 		expectedError := errors.NewErrOutOfBounds(fmt.Sprintf("slice %d - %d out of bounds for maxLength %d for data %v", 12, 222843, len(dataArray), dataArray))
 		assert.Equal(t, expectedError, err)
 	})
+
+	t.Run("ExtractKeyValueEntryFromByteArrayWithValueAsEmptyString", func(t *testing.T) {
+		dataArray := []byte{
+			/* size: 20u32*/ 0, 0, 0, 20 /* key size: 3u32*/, 0, 0, 0, 3,
+			/* key */ 102, 111, 111 /* is_deleted */, 0 /* expiry 0u64 */, 0, 0, 0,
+			0, 0, 0, 0, 0, /* value: "" */
+		}
+		expected := NewKeyValueEntry([]byte("foo"), []byte(""), 0)
+		got, err := ExtractKeyValueEntryFromByteArray(dataArray, 0)
+		if err != nil {
+			t.Fatalf("error extracting key value from byte array: %s", err)
+		}
+		assert.Equal(t, expected, got)
+	})
 }
 
 func TestKeyValueEntry_AsBytes(t *testing.T) {

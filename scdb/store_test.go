@@ -74,6 +74,27 @@ func TestStore_Get(t *testing.T) {
 		nonExistentKeys := [][]byte{[]byte("blue"), []byte("green"), []byte("red")}
 		assertKeysDontExist(t, store, nonExistentKeys)
 	})
+
+	t.Run("GetDoesNotErrForEmptyStringValues", func(t *testing.T) {
+		key := []byte("foo")
+		value := []byte("")
+		defer func() {
+			removeStore(t, dbPath)
+		}()
+
+		err := store.Set(key, value, nil)
+		if err != nil {
+			t.Fatalf("error inserting key value: %s", err)
+		}
+
+		for i := 1; i <= 3; i++ {
+			got, err := store.Get(key)
+			if err != nil {
+				t.Fatalf("error getting key value: %s", err)
+			}
+			assert.Equal(t, value, got)
+		}
+	})
 }
 
 func TestStore_SearchDisabled(t *testing.T) {
